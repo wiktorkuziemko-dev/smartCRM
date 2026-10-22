@@ -1,0 +1,134 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
+import type { FastifyInstance } from 'fastify';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { db, schema } from '../db/index.js';
+import { config } from '../config.js';
+import { requireAuth } from '../lib/auth.js';
+import { loadClientFor, touchClient } from '../lib/access.js';
+import { idParam, parse } from '../lib/validate.js';
+
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword', 'application/vnd.ms-excel',
+]);
+const INLINE_MIME = /^(image\/(jpeg|png|gif|webp)|application\/pdf)$/;
+const USER_TYPES = new Set(['comment', 'call', 'meeting', 'email']);
+
+export async function activityRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireAuth);
+  fs.mkdirSync(config.uploadDir, { recursive: true });
+
+  app.get('/api/clients/:id/activities', async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    if (!(await loadClientFor(req.user, params.id, reply))) return;
+    const rows = await db.select({ activity: schema.activities, authorName: schema.users.fullName })
+      .from(schema.activities)
+      .leftJoin(schema.users, eq(schema.users.id, schema.activities.authorId))
+      .where(eq(schema.activities.clientId, params.id))
+      .orderBy(desc(schema.activities.createdAt));
+    const ids = rows.map((r) => r.activity.id);
+    const files = ids.length
+      ? await db.select().from(schema.attachments).where(inArray(schema.attachments.activityId, ids)).orderBy(asc(schema.attachments.id))
+      : [];
+    return rows.map(({ activity, authorName }) => ({
+      ...activity,
+      authorName,
+      attachments: files.filter((f) => f.activityId === activity.id)
+        .map(({ id, fileName, mimeType, size }) => ({ id, fileName, mimeType, size })),
+    }));
+  });
+
+  /** Nowy wpis w historii: multipart z polami "type", "content" i dowolną liczbą plików "files". */
+  app.post('/api/clients/:id/activities', async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    if (!(await loadClientFor(req.user, params.id, reply))) return;
+
+    let type = 'comment';
+    let content = '';
+    const saved: { fileName: string; storedName: string; mimeType: string; size: number }[] = [];
+    const cleanup = () => saved.forEach((f) => fs.rmSync(path.join(config.uploadDir, f.storedName), { force: true }));
+
+    try {
+      for await (const part of req.parts()) {
+        if (part.type === 'field') {
+          if (part.fieldname === 'type' && USER_TYPES.has(String(part.value))) type = String(part.value);
+          if (part.fieldname === 'content') content = String(part.value).slice(0, 20_000);
+          continue;
+        }
+        if (!ALLOWED_MIME.has(part.mimetype)) {
+          part.file.resume();
+          cleanup();
+          return reply.code(400).send({ error: `Niedozwolony typ pliku: ${part.filename}. Dozwolone: zdjęcia, PDF, Word, Excel.` });
+        }
+        const storedName = `${crypto.randomUUID()}${path.extname(part.filename).toLowerCase().replace(/[^.a-z0-9]/g, '')}`;
+        const target = path.join(config.uploadDir, storedName);
+        await pipeline(part.file, fs.createWriteStream(target));
+        if (part.file.truncated) {
+          fs.rmSync(target, { force: true });
+          cleanup();
+          return reply.code(413).send({ error: `Plik ${part.filename} przekracza ${config.maxUploadMb} MB` });
+        }
+        saved.push({ fileName: part.filename.slice(0, 255), storedName, mimeType: part.mimetype, size: fs.statSync(target).size });
+      }
+    } catch (err) {
+      cleanup();
+      throw err;
+    }
+
+    if (!content.trim() && saved.length === 0) {
+      return reply.code(400).send({ error: 'Wpis nie może być pusty' });
+    }
+    const [activity] = await db.insert(schema.activities).values({
+      clientId: params.id,
+      authorId: req.user.id,
+      type: type as 'comment',
+      content: content.trim(),
+    }).returning();
+    if (saved.length) {
+      await db.insert(schema.attachments).values(saved.map((f) => ({ ...f, activityId: activity.id })));
+    }
+    await touchClient(params.id);
+    return activity;
+  });
+
+  app.delete('/api/activities/:id', async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    const [activity] = await db.select().from(schema.activities).where(eq(schema.activities.id, params.id));
+    if (!activity) return reply.code(404).send({ error: 'Nie znaleziono wpisu' });
+    if (!(await loadClientFor(req.user, activity.clientId, reply))) return;
+    if (activity.authorId !== req.user.id && req.user.role !== 'ADMIN') {
+      return reply.code(403).send({ error: 'Możesz usuwać tylko własne wpisy' });
+    }
+    const files = await db.select().from(schema.attachments).where(eq(schema.attachments.activityId, activity.id));
+    await db.delete(schema.activities).where(eq(schema.activities.id, activity.id));
+    files.forEach((f) => fs.rmSync(path.join(config.uploadDir, f.storedName), { force: true }));
+    return { ok: true };
+  });
+
+  app.get('/api/attachments/:id', async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    const [file] = await db.select({ file: schema.attachments, clientId: schema.activities.clientId })
+      .from(schema.attachments)
+      .innerJoin(schema.activities, eq(schema.activities.id, schema.attachments.activityId))
+      .where(eq(schema.attachments.id, params.id));
+    if (!file) return reply.code(404).send({ error: 'Nie znaleziono pliku' });
+    if (!(await loadClientFor(req.user, file.clientId, reply))) return;
+    const { storedName, mimeType, fileName } = file.file;
+    const disposition = INLINE_MIME.test(mimeType) && !(req.query as { download?: string }).download ? 'inline' : 'attachment';
+    return reply
+      .header('Content-Type', mimeType)
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+      .send(fs.createReadStream(path.join(config.uploadDir, storedName)));
+  });
+}
