@@ -57,6 +57,35 @@ export function StatusBadge({ name, color }: { name: string; color: string }) {
   );
 }
 
+export function TagChip({ name, color, onRemove }: { name: string; color: string; onRemove?: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-xs font-medium"
+      style={{ borderColor: `${color}55`, backgroundColor: `${color}14`, color }}>
+      #{name}
+      {onRemove && <button type="button" onClick={onRemove} className="opacity-60 hover:opacity-100"><X size={11} /></button>}
+    </span>
+  );
+}
+
+/** Wybór wielu tagów – kliknięcie przełącza tag. */
+export function TagPicker({ tags, value, onChange }: { tags: { id: number; name: string; color: string }[]; value: number[]; onChange: (ids: number[]) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((t) => {
+        const on = value.includes(t.id);
+        return (
+          <button key={t.id} type="button" onClick={() => onChange(on ? value.filter((x) => x !== t.id) : [...value, t.id])}
+            className="rounded-md border px-2 py-1 text-xs font-medium transition"
+            style={on ? { borderColor: t.color, backgroundColor: t.color, color: '#fff' } : { borderColor: '#e2e8f0', color: '#64748b' }}>
+            #{t.name}
+          </button>
+        );
+      })}
+      {tags.length === 0 && <span className="text-xs text-slate-400">Administrator nie zdefiniował jeszcze tagów.</span>}
+    </div>
+  );
+}
+
 const avatarColors = ['bg-blue-500', 'bg-sky-500', 'bg-indigo-500', 'bg-cyan-600', 'bg-violet-500', 'bg-teal-500'];
 export function Avatar({ name, size = 28 }: { name: string | null | undefined; size?: number }) {
   const color = avatarColors[(name ?? '').length % avatarColors.length];

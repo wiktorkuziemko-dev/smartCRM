@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Download, FilterX, Plus, Search } from 'lucide-react';
-import type { ClientRow, CustomField, Status } from '../lib/api';
+import type { ClientRow, CustomField, Status, Tag } from '../lib/api';
 import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
-import { seesAll, useClients, useFields, useMe, useStatuses, useUsers, useVoivodeships } from '../lib/queries';
+import { useClients, useFields, useStatuses, useTags, useUsers, useVoivodeships } from '../lib/queries';
 import { ClientPanel } from '../components/ClientPanel';
 import { ClientForm } from '../components/ClientForm';
 import { formatCustomValue } from '../components/CustomFieldInput';
-import { Button, Empty, StatusBadge } from '../components/ui';
+import { Button, Empty, StatusBadge, TagChip } from '../components/ui';
 
 type Value = string | number | boolean | null | undefined;
 interface Column {
@@ -18,6 +18,7 @@ interface Column {
   text?: (r: ClientRow) => string;        // tekst do wyświetlenia/filtrowania
   render?: (r: ClientRow) => ReactNode;
   filter: 'text' | 'number' | { options: string[] };
+  match?: (r: ClientRow, f: string) => boolean; // własna logika filtra
   width: number;
 }
 
@@ -42,7 +43,7 @@ function matchNumber(value: Value, query: string) {
   }
 }
 
-function buildColumns(statuses: Status[], fields: CustomField[], voivodeships: string[], owners: string[], showOwner: boolean): Column[] {
+function buildColumns(statuses: Status[], tags: Tag[], fields: CustomField[], voivodeships: string[], owners: string[]): Column[] {
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const cols: Column[] = [
     { id: 'name', label: 'Nazwa', value: (r) => r.name, filter: 'text', width: 220,
@@ -60,7 +61,13 @@ function buildColumns(statuses: Status[], fields: CustomField[], voivodeships: s
       text: (r) => statusById.get(r.statusId ?? -1)?.name ?? '',
       render: (r) => { const s = statusById.get(r.statusId ?? -1); return s && <StatusBadge name={s.name} color={s.color} />; } },
   ];
-  if (showOwner) cols.push({ id: 'owner', label: 'Opiekun', value: (r) => r.ownerName, filter: { options: owners }, width: 150 });
+  const tagById = new Map(tags.map((t) => [t.id, t]));
+  const tagsOf = (r: ClientRow) => r.tagIds.map((id) => tagById.get(id)).filter((t): t is Tag => Boolean(t));
+  cols.splice(1, 0, { id: 'tags', label: 'Tagi', filter: { options: tags.map((t) => t.name) }, width: 150,
+    value: (r) => tagsOf(r).map((t) => t.name).join(', '),
+    match: (r, f) => tagsOf(r).some((t) => t.name === f),
+    render: (r) => <div className="flex gap-1">{tagsOf(r).map((t) => <TagChip key={t.id} name={t.name} color={t.color} />)}</div> });
+  cols.push({ id: 'owner', label: 'Opiekun', value: (r) => r.ownerName, filter: { options: owners }, width: 150 });
   cols.push({ id: 'tasks', label: 'Najbliższe zadanie', value: (r) => r.nextTaskDue, filter: 'text', width: 150,
     text: (r) => (r.nextTaskDue ? fmtDue(r.nextTaskDue) : ''),
     render: (r) => r.nextTaskDue && <span className={isOverdue(r.nextTaskDue) ? 'font-medium text-red-600' : ''}>{fmtDue(r.nextTaskDue)}{r.openTasks > 1 && <span className="text-slate-400"> (+{r.openTasks - 1})</span>}</span> });
@@ -80,10 +87,10 @@ export function ClientsPage() {
   const { id } = useParams();
   const selectedId = id ? Number(id) : null;
   const navigate = useNavigate();
-  const { data: me } = useMe();
   const { data: clients = [], isLoading } = useClients();
   const { data: statuses = [] } = useStatuses();
   const { data: fields = [] } = useFields();
+  const { data: tags = [] } = useTags();
   const { data: users = [] } = useUsers();
   const { data: voivodeships = [] } = useVoivodeships();
 
@@ -98,8 +105,8 @@ export function ClientsPage() {
   useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); } catch { /* ignoruj */ } }, [hidden]);
 
   const allColumns = useMemo(
-    () => buildColumns(statuses, fields, voivodeships, users.map((u) => u.fullName), seesAll(me)),
-    [statuses, fields, voivodeships, users, me],
+    () => buildColumns(statuses, tags, fields, voivodeships, users.map((u) => u.fullName)),
+    [statuses, tags, fields, voivodeships, users],
   );
   const columns = allColumns.filter((c) => !hidden.includes(c.id));
   const textOf = (c: Column, r: ClientRow) => (c.text ? c.text(r) : String(c.value(r) ?? ''));
@@ -112,6 +119,7 @@ export function ClientsPage() {
         if (!f) return true;
         const col = allColumns.find((c) => c.id === colId);
         if (!col) return true;
+        if (col.match) return col.match(r, f);
         if (col.filter === 'number') return matchNumber(col.value(r), f);
         if (typeof col.filter === 'object') return textOf(col, r) === f;
         return textOf(col, r).toLowerCase().includes(f.toLowerCase());

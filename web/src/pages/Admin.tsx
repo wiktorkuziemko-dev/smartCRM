@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react';
-import { api, type CustomField, type FieldType, type Role, type Status, type UserRow } from '../lib/api';
-import { ROLE_LABELS, useFields, useMe, useStatuses, useUsers } from '../lib/queries';
-import { Avatar, Button, ErrorText, Field, Modal, StatusBadge } from '../components/ui';
+import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow } from '../lib/api';
+import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
+import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Pola klienta'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
@@ -26,6 +26,7 @@ export function AdminPage() {
       </div>
       {tab === 'Użytkownicy' && <UsersTab />}
       {tab === 'Statusy klienta' && <StatusesTab />}
+      {tab === 'Tagi' && <TagsTab />}
       {tab === 'Pola klienta' && <FieldsTab />}
     </div>
   );
@@ -51,7 +52,7 @@ function UsersTab() {
   return (
     <>
       <div className="mb-3 flex justify-between">
-        <p className="text-sm text-slate-500">Handlowiec widzi tylko swoich klientów. Kierownik widzi wszystkich i może zmieniać opiekunów. Administrator dodatkowo zarządza ustawieniami.</p>
+        <p className="text-sm text-slate-500">Handlowiec widzi swoich klientów oraz tych, których mu udostępnisz (na karcie klienta lub przez tagi). Kierownik widzi wszystkich i może zmieniać opiekunów. Administrator dodatkowo zarządza ustawieniami.</p>
         <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj użytkownika</Button>
       </div>
       <Card>
@@ -194,6 +195,95 @@ function StatusForm({ status, onClose }: { status?: Status; onClose: () => void 
           </label>
         )}
         <div><span className="label">Podgląd</span><StatusBadge name={form.name || 'Status'} color={form.color} /></div>
+        <ErrorText error={error} />
+        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Anuluj</Button><Button onClick={save} disabled={!form.name.trim()}>Zapisz</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------- Tagi ----------------
+function TagsTab() {
+  const { data: tags = [] } = useTags();
+  const { data: users = [] } = useUsers();
+  const qc = useQueryClient();
+  const [edit, setEdit] = useState<{ tag?: Tag } | null>(null);
+  const refresh = () => qc.invalidateQueries({ queryKey: ['tags'] });
+
+  async function remove(t: Tag) {
+    if (!confirm(`Usunąć tag "#${t.name}"? Zniknie ze wszystkich klientów, a handlowcy stracą dostęp nadany przez ten tag.`)) return;
+    await api.del(`/api/tags/${t.id}`);
+    await refresh();
+    qc.invalidateQueries({ queryKey: ['clients'] });
+  }
+
+  return (
+    <>
+      <div className="mb-3 flex justify-between gap-4">
+        <p className="text-sm text-slate-500">Handlowcy przypisują tagi klientom, wybierając je z tej listy. Przy każdym tagu możesz wskazać handlowców, którzy zobaczą <b>wszystkich klientów z tym tagiem</b>, także tych, którymi się nie opiekują.</p>
+        <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj tag</Button>
+      </div>
+      <Card>
+        {tags.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Brak tagów.</p>}
+        {tags.map((t, i) => (
+          <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-0">
+            <div className="w-36"><TagChip name={t.name} color={t.color} /></div>
+            <div className="flex flex-1 flex-wrap items-center gap-1.5 text-xs text-slate-500">
+              {t.userIds?.length ? <>Widzą: {t.userIds.map((id) => users.find((u) => u.id === id)).filter(Boolean).map((u) => (
+                <span key={u!.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2"><Avatar name={u!.fullName} size={18} />{u!.fullName}</span>
+              ))}</> : <span className="text-slate-400">brak dodatkowej widoczności</span>}
+            </div>
+            <button disabled={i === 0} onClick={() => move(tags.map((x) => x.id), i, -1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowUp size={15} /></button>
+            <button disabled={i === tags.length - 1} onClick={() => move(tags.map((x) => x.id), i, 1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowDown size={15} /></button>
+            <button onClick={() => setEdit({ tag: t })} className="text-slate-400 hover:text-brand-600"><Pencil size={15} /></button>
+            <button onClick={() => remove(t)} className="text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </Card>
+      {edit && <TagForm tag={edit.tag} onClose={() => setEdit(null)} />}
+    </>
+  );
+}
+
+function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data: users = [] } = useUsers();
+  const [form, setForm] = useState({ name: tag?.name ?? '', color: tag?.color ?? '#0ea5e9', userIds: tag?.userIds ?? [] });
+  const [error, setError] = useState<unknown>(null);
+  const sales = users.filter((u) => u.role === 'SALES' && u.active);
+
+  async function save() {
+    try {
+      if (tag) await api.put(`/api/tags/${tag.id}`, form);
+      else await api.post('/api/tags', form);
+      await qc.invalidateQueries({ queryKey: ['tags'] });
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      onClose();
+    } catch (err) { setError(err); }
+  }
+
+  const toggle = (id: number) => setForm((f) => ({ ...f, userIds: f.userIds.includes(id) ? f.userIds.filter((x) => x !== id) : [...f.userIds, id] }));
+
+  return (
+    <Modal title={tag ? 'Edytuj tag' : 'Nowy tag'} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex gap-3">
+          <Field label="Nazwa" className="flex-1"><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus /></Field>
+          <Field label="Kolor"><input type="color" className="h-[38px] w-16 cursor-pointer rounded-lg border border-slate-200" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} /></Field>
+        </div>
+        <div><span className="label">Podgląd</span><TagChip name={form.name.toLowerCase() || 'tag'} color={form.color} /></div>
+        <div>
+          <span className="label">Handlowcy, którzy widzą wszystkich klientów z tym tagiem</span>
+          <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
+            {sales.map((u) => (
+              <label key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+                <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.userIds.includes(u.id)} onChange={() => toggle(u.id)} />
+                <Avatar name={u.fullName} size={22} /> {u.fullName}
+              </label>
+            ))}
+            {sales.length === 0 && <p className="px-2 py-1 text-sm text-slate-400">Brak aktywnych handlowców.</p>}
+          </div>
+        </div>
         <ErrorText error={error} />
         <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Anuluj</Button><Button onClick={save} disabled={!form.name.trim()}>Zapisz</Button></div>
       </div>

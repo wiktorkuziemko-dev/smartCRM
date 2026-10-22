@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type ClientDetail } from '../lib/api';
-import { seesAll, useFields, useMe, useStatuses, useUsers, useVoivodeships } from '../lib/queries';
-import { Button, ErrorText, Field, Modal } from './ui';
+import { seesAll, useFields, useMe, useStatuses, useTags, useUsers, useVoivodeships } from '../lib/queries';
+import { Button, ErrorText, Field, Modal, TagPicker } from './ui';
 import { CustomFieldInput } from './CustomFieldInput';
 
 interface Props { client?: ClientDetail; onClose: () => void; onSaved: (id: number) => void }
@@ -13,6 +13,7 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
   const { data: fields = [] } = useFields();
   const { data: users = [] } = useUsers();
   const { data: voivodeships = [] } = useVoivodeships();
+  const { data: tags = [] } = useTags();
   const qc = useQueryClient();
 
   const [form, setForm] = useState({
@@ -27,6 +28,7 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
     statusId: client?.statusId?.toString() ?? statuses.find((s) => s.active)?.id.toString() ?? '',
     ownerId: client?.ownerId?.toString() ?? me?.id.toString() ?? '',
   });
+  const [tagIds, setTagIds] = useState<number[]>(client?.tagIds ?? []);
   const [custom, setCustom] = useState<Record<string, unknown>>(client?.custom ?? {});
   const [contact, setContact] = useState({ name: '', position: '', phone: '', email: '' });
   const [error, setError] = useState<unknown>(null);
@@ -46,6 +48,7 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
       statusId: form.statusId ? Number(form.statusId) : null,
       ownerId: seesAll(me) && form.ownerId ? Number(form.ownerId) : undefined,
       custom,
+      tagIds,
     };
     try {
       let id = client?.id;
@@ -92,6 +95,11 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
               </select>
             </Field>
           )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-slate-700">Tagi</h3>
+          <TagPicker tags={tags} value={tagIds} onChange={setTagIds} />
         </div>
 
         {activeFields.length > 0 && (

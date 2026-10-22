@@ -6,13 +6,17 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 ## Funkcje
 
 - **Logowanie i role**: Administrator, Kierownik, Handlowiec
-  - *Handlowiec* widzi i edytuje tylko swoich klientów oraz swoje zadania.
+  - *Handlowiec* widzi i edytuje swoich klientów oraz klientów, których udostępnił mu administrator: pojedynczo na karcie klienta albo przez tag.
   - *Kierownik* widzi wszystkich klientów i zadania, zmienia opiekunów, przypisuje zadania i usuwa klientów.
   - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami i polami klienta.
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zadania i historia kontaktów.
 - **Historia kontaktów**: komentarze, telefony, spotkania, e-maile oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
+- **Tagi**: listą zarządza administrator (na start: `przetarg`, `prywatne`, `publiczne`), a handlowcy przypisują tagi swoim klientom. Na liście klientów można filtrować po tagu.
+- **Widoczność klientów**: administrator może:
+  - na karcie klienta (sekcja „Widoczność dla handlowców”) wskazać handlowców, którzy widzą tego klienta,
+  - w *Administracja → Tagi* wskazać handlowców, którzy widzą **wszystkich klientów z danym tagiem**.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
 - **Zadania i przypomnienia**: widok „Moje zadania” (zaległe / dziś / jutro / później), przypomnienie w aplikacji 15 minut przed terminem.
 - **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć pełną automatyczną synchronizację (opis niżej).
@@ -33,8 +37,9 @@ Hasło administratora z `.env` obowiązuje tylko przy pierwszym uruchomieniu. P�
 
 Pierwsze kroki po zalogowaniu:
 1. **Administracja → Statusy klienta**: dostosuj etapy lejka (są domyślne, możesz je zmienić).
-2. **Administracja → Pola klienta**: dodaj własne pola.
-3. **Administracja → Użytkownicy**: załóż konta kierownika i handlowców.
+2. **Administracja → Tagi**: dostosuj tagi i widoczność.
+3. **Administracja → Pola klienta**: dodaj własne pola.
+4. **Administracja → Użytkownicy**: załóż konta kierownika i handlowców.
 
 ### Aktualizacja
 

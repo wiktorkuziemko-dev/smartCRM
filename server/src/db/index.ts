@@ -24,6 +24,12 @@ const DEFAULT_STATUSES = [
   { name: 'Utracony', color: '#ef4444' },
 ];
 
+const DEFAULT_TAGS = [
+  { name: 'przetarg', color: '#f59e0b' },
+  { name: 'prywatne', color: '#0ea5e9' },
+  { name: 'publiczne', color: '#8b5cf6' },
+];
+
 /** Migracje + dane startowe (admin i domyślne statusy przy pierwszym uruchomieniu). */
 export async function initDb() {
   await migrate(db, { migrationsFolder });
@@ -42,5 +48,10 @@ export async function initDb() {
   const [{ value: statusCount }] = await db.select({ value: count() }).from(schema.clientStatuses);
   if (statusCount === 0) {
     await db.insert(schema.clientStatuses).values(DEFAULT_STATUSES.map((s, i) => ({ ...s, position: i })));
+  }
+
+  const [{ value: tagCount }] = await db.select({ value: count() }).from(schema.tags);
+  if (tagCount === 0) {
+    await db.insert(schema.tags).values(DEFAULT_TAGS.map((t, i) => ({ ...t, position: i })));
   }
 }

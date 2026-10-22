@@ -1,15 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Mail, Pencil, Phone, Plus, Star, Trash2, X } from 'lucide-react';
+import { Briefcase, Eye, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
 import { api, type ClientDetail, type Contact, type Task } from '../lib/api';
 import { fmtDateTime, fmtNip, fmtNumber } from '../lib/format';
-import { seesAll, useFields, useMe, useStatuses, useTasks } from '../lib/queries';
+import { seesAll, useFields, useMe, useStatuses, useTags, useTasks, useUsers } from '../lib/queries';
 import { ActivityFeed } from './ActivityFeed';
 import { ClientForm } from './ClientForm';
 import { formatCustomValue } from './CustomFieldInput';
 import { TaskForm } from './TaskForm';
 import { TaskItem } from './TaskItem';
-import { Avatar, Button, Empty, ErrorText, Field, Modal } from './ui';
+import { Avatar, Button, Empty, ErrorText, Field, Modal, TagChip, TagPicker } from './ui';
 
 export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: () => void }) {
   const { data: me } = useMe();
@@ -47,6 +47,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
             <p className="mt-0.5 text-sm text-white/75">
               {[client.nip && `NIP ${fmtNip(client.nip)}`, client.voivodeship, client.ownerName && `Opiekun: ${client.ownerName}`].filter(Boolean).join(' · ')}
             </p>
+            <HeaderTags client={client} />
           </div>
           <button onClick={() => setEditing(true)} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Edytuj"><Pencil size={17} /></button>
           {seesAll(me) && <button onClick={remove} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Usuń klienta"><Trash2 size={17} /></button>}
@@ -114,6 +115,8 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           )}
         </Section>
 
+        {me?.role === 'ADMIN' && <VisibilitySection client={client} />}
+
         <Section title={`Zadania (${tasks.length})`} action={<button onClick={() => setTaskForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             {tasks.length === 0 ? <Empty>Brak otwartych zadań</Empty> : tasks.map((t) => (
@@ -131,6 +134,96 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
       {taskForm && <TaskForm task={taskForm.task} clientId={clientId} onClose={() => setTaskForm(null)} />}
       {contactForm && <ContactForm clientId={clientId} contact={contactForm.contact} onClose={() => setContactForm(null)} />}
     </div>
+  );
+}
+
+/** Tagi w nagłówku panelu – handlowiec może je szybko zmienić. */
+function HeaderTags({ client }: { client: ClientDetail }) {
+  const { data: tags = [] } = useTags();
+  const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
+  const current = tags.filter((t) => client.tagIds.includes(t.id));
+
+  async function save(tagIds: number[]) {
+    await api.put(`/api/clients/${client.id}`, { tagIds });
+    await Promise.all(['client', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k, client.id] })));
+    qc.invalidateQueries({ queryKey: ['clients'] });
+  }
+
+  return (
+    <div className="relative mt-2 flex flex-wrap items-center gap-1.5">
+      {current.map((t) => (
+        <span key={t.id} className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs font-medium" style={{ color: t.color }}>#{t.name}</span>
+      ))}
+      <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 rounded-md border border-white/30 px-1.5 py-0.5 text-xs text-white/85 hover:bg-white/15">
+        <TagIcon size={11} /> {current.length ? 'Zmień' : 'Dodaj tag'}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-3 text-slate-700 shadow-xl">
+            <div className="mb-2 text-xs font-medium text-slate-500">Tagi klienta</div>
+            <TagPicker tags={tags} value={client.tagIds} onChange={save} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Admin: którzy handlowcy (oprócz opiekuna) widzą tego klienta. */
+function VisibilitySection({ client }: { client: ClientDetail }) {
+  const { data: users = [] } = useUsers();
+  const { data: tags = [] } = useTags();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const sales = users.filter((u) => u.role === 'SALES' && u.active && u.id !== client.ownerId);
+  const direct = client.accessUserIds ?? [];
+  // Handlowcy, którzy widzą klienta dzięki tagom (ustawienia w Administracja → Tagi).
+  const viaTags = new Map<number, string[]>();
+  for (const t of tags.filter((t) => client.tagIds.includes(t.id))) {
+    for (const uid of t.userIds ?? []) viaTags.set(uid, [...(viaTags.get(uid) ?? []), t.name]);
+  }
+
+  async function toggle(userId: number) {
+    const next = direct.includes(userId) ? direct.filter((x) => x !== userId) : [...direct, userId];
+    await api.put(`/api/clients/${client.id}/access`, { userIds: next });
+    await qc.invalidateQueries({ queryKey: ['client', client.id] });
+  }
+
+  const visible = sales.filter((u) => direct.includes(u.id) || viaTags.has(u.id));
+
+  return (
+    <Section title="Widoczność dla handlowców" action={
+      <button onClick={() => setEditing((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">{editing ? 'Gotowe' : 'Zmień'}</button>
+    }>
+      <p className="mb-2 text-xs text-slate-500">
+        Opiekun: <b>{client.ownerName ?? 'brak'}</b>. Kierownicy i administratorzy widzą wszystkich klientów.
+      </p>
+      {editing ? (
+        <div className="space-y-1 rounded-xl border border-slate-200 p-2">
+          {sales.map((u) => (
+            <label key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={direct.includes(u.id)} onChange={() => toggle(u.id)} />
+              <Avatar name={u.fullName} size={22} /> <span className="flex-1">{u.fullName}</span>
+              {viaTags.has(u.id) && <span className="text-xs text-slate-400">przez tag {viaTags.get(u.id)!.map((n) => `#${n}`).join(', ')}</span>}
+            </label>
+          ))}
+          {sales.length === 0 && <p className="px-2 py-1 text-sm text-slate-400">Brak innych handlowców.</p>}
+        </div>
+      ) : visible.length ? (
+        <div className="flex flex-wrap gap-2">
+          {visible.map((u) => (
+            <span key={u.id} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-0.5 pl-0.5 pr-2 text-xs">
+              <Avatar name={u.fullName} size={20} /> {u.fullName}
+              {!direct.includes(u.id) && <TagChip name={viaTags.get(u.id)![0]} color="#64748b" />}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="flex items-center gap-1.5 text-sm text-slate-400"><Eye size={14} /> Tylko opiekun.</p>
+      )}
+    </Section>
   );
 }
 

@@ -1,5 +1,5 @@
 import {
-  pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index,
+  pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index, primaryKey,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['ADMIN', 'MANAGER', 'SALES']);
@@ -105,6 +105,31 @@ export const tasks = pgTable('tasks', {
   googleEventId: varchar('google_event_id', { length: 255 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('tasks_assignee_idx').on(t.assigneeId), index('tasks_client_idx').on(t.clientId)]);
+
+/** Tagi klientów – listą zarządza admin, handlowcy przypisują je klientom. */
+export const tags = pgTable('tags', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 64 }).notNull().unique(),
+  color: varchar('color', { length: 16 }).notNull().default('#64748b'),
+  position: integer('position').notNull().default(0),
+});
+
+export const clientTags = pgTable('client_tags', {
+  clientId: integer('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.clientId, t.tagId] }), index('client_tags_tag_idx').on(t.tagId)]);
+
+/** Dodatkowa widoczność: handlowiec widzi konkretnego klienta (oprócz własnych). */
+export const clientAccess = pgTable('client_access', {
+  clientId: integer('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.clientId, t.userId] }), index('client_access_user_idx').on(t.userId)]);
+
+/** Dodatkowa widoczność: handlowiec widzi wszystkich klientów oznaczonych danym tagiem. */
+export const tagAccess = pgTable('tag_access', {
+  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+}, (t) => [primaryKey({ columns: [t.tagId, t.userId] }), index('tag_access_user_idx').on(t.userId)]);
 
 export type User = typeof users.$inferSelect;
 export type Role = User['role'];

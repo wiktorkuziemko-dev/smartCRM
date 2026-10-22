@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
-import { requireAuth, seesAllClients } from '../lib/auth.js';
+import { requireAuth } from '../lib/auth.js';
+import { clientVisibleTo } from '../lib/access.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get('/api/dashboard', { preHandler: requireAuth }, async (req) => {
-    const own = seesAllClients(req.user) ? undefined : eq(schema.clients.ownerId, req.user.id);
+    const own = clientVisibleTo(req.user);
 
     const byStatus = await db.select({
       statusId: schema.clients.statusId,

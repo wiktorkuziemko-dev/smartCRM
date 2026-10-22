@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole, seesAllClients, type SessionUser } from '../lib/auth.js';
-import { loadClientFor, touchClient } from '../lib/access.js';
+import { clientVisibleTo, loadClientFor, touchClient } from '../lib/access.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 
 export const VOIVODESHIPS = [
@@ -25,6 +25,7 @@ const clientBody = z.object({
   statusId: z.number().int().nullish().transform((v) => v ?? null),
   ownerId: z.number().int().nullish(),
   custom: z.record(z.string(), z.unknown()).default({}),
+  tagIds: z.array(z.number().int()).max(50).optional(),
 });
 
 const contactBody = z.object({
@@ -83,6 +84,36 @@ async function userName(id: number | null) {
   return u?.fullName ?? 'brak';
 }
 
+async function tagIdsByClient(clientIds: number[]) {
+  const map = new Map<number, number[]>();
+  if (!clientIds.length) return map;
+  const rows = await db.select().from(schema.clientTags).where(inArray(schema.clientTags.clientId, clientIds));
+  for (const r of rows) map.set(r.clientId, [...(map.get(r.clientId) ?? []), r.tagId]);
+  return map;
+}
+
+/** Ustawia tagi klienta i zapisuje zmianę w historii. */
+async function setClientTags(clientId: number, authorId: number, tagIds: number[], isNew = false) {
+  const all = await db.select().from(schema.tags);
+  const valid = new Set(all.map((t) => t.id));
+  const next = [...new Set(tagIds.filter((id) => valid.has(id)))];
+  const prev = (await tagIdsByClient([clientId])).get(clientId) ?? [];
+  const added = next.filter((id) => !prev.includes(id));
+  const removed = prev.filter((id) => !next.includes(id));
+  if (!added.length && !removed.length) return false;
+  await db.delete(schema.clientTags).where(eq(schema.clientTags.clientId, clientId));
+  if (next.length) await db.insert(schema.clientTags).values(next.map((tagId) => ({ clientId, tagId })));
+  if (!isNew) {
+    const name = (id: number) => all.find((t) => t.id === id)?.name;
+    const parts = [
+      added.length && `dodano ${added.map(name).join(', ')}`,
+      removed.length && `usunięto ${removed.map(name).join(', ')}`,
+    ].filter(Boolean);
+    await logActivity(clientId, authorId, 'system', `Tagi: ${parts.join('; ')}`);
+  }
+  return true;
+}
+
 function resolveOwner(user: SessionUser, requested: number | null | undefined, current: number | null) {
   if (!seesAllClients(user)) return current ?? user.id; // handlowiec nie zmienia opiekuna
   return requested === undefined ? (current ?? user.id) : requested;
@@ -94,7 +125,7 @@ export async function clientRoutes(app: FastifyInstance) {
   app.get('/api/voivodeships', async () => VOIVODESHIPS);
 
   app.get('/api/clients', async (req) => {
-    const where = seesAllClients(req.user) ? undefined : eq(schema.clients.ownerId, req.user.id);
+    const where = clientVisibleTo(req.user);
     const rows = await db.select({
       client: schema.clients,
       ownerName: schema.users.fullName,
@@ -122,6 +153,7 @@ export async function clientRoutes(app: FastifyInstance) {
         .groupBy(schema.tasks.clientId)
       : [];
     const stats = new Map(taskStats.map((t) => [t.clientId, t]));
+    const tagMap = await tagIdsByClient(ids);
 
     return rows.map(({ client, ownerName }) => {
       const p = primary.get(client.id);
@@ -129,6 +161,7 @@ export async function clientRoutes(app: FastifyInstance) {
       return {
         ...client,
         ownerName,
+        tagIds: tagMap.get(client.id) ?? [],
         contactName: p?.name ?? null,
         contactPosition: p?.position ?? null,
         contactPhone: p?.phone ?? null,
@@ -147,14 +180,19 @@ export async function clientRoutes(app: FastifyInstance) {
     const contacts = await db.select().from(schema.contacts)
       .where(eq(schema.contacts.clientId, client.id))
       .orderBy(desc(schema.contacts.isPrimary), asc(schema.contacts.id));
-    return { ...client, ownerName: await userName(client.ownerId), contacts };
+    const tagIds = (await tagIdsByClient([client.id])).get(client.id) ?? [];
+    // Lista handlowców, którym admin udostępnił klienta – widoczna tylko dla admina.
+    const accessUserIds = req.user.role === 'ADMIN'
+      ? (await db.select().from(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id))).map((a) => a.userId)
+      : undefined;
+    return { ...client, ownerName: await userName(client.ownerId), contacts, tagIds, accessUserIds };
   });
 
   app.post('/api/clients', async (req, reply) => {
     const body = parse(clientBody.extend({ contact: contactBody.partial({ name: true }).optional() }), req.body, reply);
     if (!body) return;
     if (!(await checkDuplicateNip(body.nip, null, reply))) return;
-    const { contact, ownerId, custom, ...data } = body;
+    const { contact, ownerId, custom, tagIds, ...data } = body;
     const [client] = await db.insert(schema.clients).values({
       ...data,
       ownerId: resolveOwner(req.user, ownerId, null),
@@ -163,6 +201,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (contact?.name) {
       await db.insert(schema.contacts).values({ ...contact, name: contact.name, clientId: client.id, isPrimary: true });
     }
+    if (tagIds?.length) await setClientTags(client.id, req.user.id, tagIds, true);
     await logActivity(client.id, req.user.id, 'system', 'Utworzono klienta');
     return client;
   });
@@ -175,7 +214,8 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!client) return;
     if (body.nip !== undefined && !(await checkDuplicateNip(body.nip, client.id, reply))) return;
 
-    const { ownerId, custom, ...data } = body;
+    const { ownerId, custom, tagIds, ...data } = body;
+    if (tagIds) await setClientTags(client.id, req.user.id, tagIds);
     const newOwner = resolveOwner(req.user, ownerId, client.ownerId);
     await db.update(schema.clients).set({
       ...data,
@@ -192,6 +232,21 @@ export async function clientRoutes(app: FastifyInstance) {
       await logActivity(client.id, req.user.id, 'system',
         `Zmiana opiekuna: ${await userName(client.ownerId)} → ${await userName(newOwner)}`);
     }
+    return { ok: true };
+  });
+
+  /** Admin wskazuje handlowców, którzy widzą klienta (oprócz opiekuna). */
+  app.put('/api/clients/:id/access', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    const body = parse(z.object({ userIds: z.array(z.number().int()).max(200) }), req.body, reply);
+    if (!params || !body) return;
+    const client = await loadClientFor(req.user, params.id, reply);
+    if (!client) return;
+    const userIds = [...new Set(body.userIds)].filter((id) => id !== client.ownerId);
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id));
+      if (userIds.length) await tx.insert(schema.clientAccess).values(userIds.map((userId) => ({ clientId: client.id, userId })));
+    });
     return { ok: true };
   });
 

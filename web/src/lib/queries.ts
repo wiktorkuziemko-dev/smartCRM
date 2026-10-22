@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { api, type ClientRow, type CustomField, type Me, type Status, type Task, type UserRow } from './api';
+import { api, type ClientRow, type CustomField, type Me, type Status, type Tag, type Task, type UserRow } from './api';
 
 export const useMe = () =>
   useQuery({ queryKey: ['me'], queryFn: () => api.get<Me>('/api/auth/me'), retry: false, staleTime: 60_000 });
 
 export const useStatuses = () =>
   useQuery({ queryKey: ['statuses'], queryFn: () => api.get<Status[]>('/api/statuses'), staleTime: 60_000 });
+
+export const useTags = () =>
+  useQuery({ queryKey: ['tags'], queryFn: () => api.get<Tag[]>('/api/tags'), staleTime: 60_000 });
 
 export const useFields = () =>
   useQuery({ queryKey: ['fields'], queryFn: () => api.get<CustomField[]>('/api/fields'), staleTime: 60_000 });

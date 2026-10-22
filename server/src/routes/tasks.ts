@@ -4,7 +4,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, seesAllClients, type SessionUser } from '../lib/auth.js';
-import { loadClientFor } from '../lib/access.js';
+import { clientVisibleTo, loadClientFor } from '../lib/access.js';
 import { syncTaskToGoogle } from '../lib/google.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 
@@ -19,10 +19,10 @@ const taskBody = z.object({
 
 const assignee = alias(schema.users, 'assignee');
 
-/** Handlowiec widzi zadania przypisane do siebie oraz zadania przy swoich klientach. */
+/** Handlowiec widzi zadania przypisane do siebie oraz zadania przy widocznych dla siebie klientach. */
 function visibility(user: SessionUser): SQL | undefined {
   if (seesAllClients(user)) return undefined;
-  return or(eq(schema.tasks.assigneeId, user.id), eq(schema.clients.ownerId, user.id));
+  return or(eq(schema.tasks.assigneeId, user.id), clientVisibleTo(user));
 }
 
 async function loadTask(user: SessionUser, id: number, reply: FastifyReply) {

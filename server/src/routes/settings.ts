@@ -72,6 +72,72 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // --- Tagi klientów ---
+  // Wszyscy widzą listę tagów; admin dodatkowo widzi, którzy handlowcy mają dostęp do klientów z tagiem.
+  app.get('/api/tags', async (req) => {
+    const tags = await db.select().from(schema.tags).orderBy(asc(schema.tags.position), asc(schema.tags.id));
+    if (req.user.role !== 'ADMIN') return tags;
+    const access = await db.select().from(schema.tagAccess);
+    return tags.map((t) => ({ ...t, userIds: access.filter((a) => a.tagId === t.id).map((a) => a.userId) }));
+  });
+
+  const tagBody = z.object({
+    name: z.string().trim().toLowerCase().min(1).max(64),
+    color,
+    userIds: z.array(z.number().int()).max(200).default([]),
+  });
+
+  async function setTagAccess(tagId: number, userIds: number[]) {
+    await db.transaction(async (tx) => {
+      await tx.delete(schema.tagAccess).where(eq(schema.tagAccess.tagId, tagId));
+      const unique = [...new Set(userIds)];
+      if (unique.length) await tx.insert(schema.tagAccess).values(unique.map((userId) => ({ tagId, userId })));
+    });
+  }
+
+  app.post('/api/tags', adminOnly, async (req, reply) => {
+    const body = parse(tagBody, req.body, reply);
+    if (!body) return;
+    const [exists] = await db.select().from(schema.tags).where(eq(schema.tags.name, body.name));
+    if (exists) return reply.code(409).send({ error: 'Taki tag już istnieje' });
+    const [{ max }] = await db.select({ max: sql<number>`coalesce(max(${schema.tags.position}), -1)` }).from(schema.tags);
+    const [row] = await db.insert(schema.tags).values({ name: body.name, color: body.color, position: Number(max) + 1 }).returning();
+    await setTagAccess(row.id, body.userIds);
+    return row;
+  });
+
+  app.put('/api/tags/:id', adminOnly, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    const body = parse(tagBody.partial(), req.body, reply);
+    if (!params || !body) return;
+    const { userIds, ...data } = body;
+    if (data.name) {
+      const [dup] = await db.select().from(schema.tags).where(eq(schema.tags.name, data.name));
+      if (dup && dup.id !== params.id) return reply.code(409).send({ error: 'Taki tag już istnieje' });
+    }
+    if (Object.keys(data).length) await db.update(schema.tags).set(data).where(eq(schema.tags.id, params.id));
+    if (userIds) await setTagAccess(params.id, userIds);
+    return { ok: true };
+  });
+
+  app.put('/api/tags-order', adminOnly, async (req, reply) => {
+    const body = parse(z.object({ ids: z.array(z.number().int()) }), req.body, reply);
+    if (!body) return;
+    await db.transaction(async (tx) => {
+      for (const [position, id] of body.ids.entries()) {
+        await tx.update(schema.tags).set({ position }).where(eq(schema.tags.id, id));
+      }
+    });
+    return { ok: true };
+  });
+
+  app.delete('/api/tags/:id', adminOnly, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    await db.delete(schema.tags).where(eq(schema.tags.id, params.id));
+    return { ok: true };
+  });
+
   // --- Pola dodatkowe klienta ---
   app.get('/api/fields', async () =>
     db.select().from(schema.customFields).orderBy(asc(schema.customFields.position), asc(schema.customFields.id)));

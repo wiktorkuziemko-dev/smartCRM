@@ -8,6 +8,7 @@ export interface UserRow {
   id: number; fullName: string; role: Role; active: boolean;
   login?: string; email?: string | null; googleConnected?: boolean;
 }
+export interface Tag { id: number; name: string; color: string; position: number; userIds?: number[] }
 export interface Status { id: number; name: string; color: string; position: number; active: boolean }
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox';
 export interface CustomField {
@@ -24,13 +25,14 @@ export interface Client {
   currentSolution: string | null; description: string | null;
   statusId: number | null; ownerId: number | null; ownerName: string | null;
   custom: Record<string, unknown>; createdAt: string; updatedAt: string;
+  tagIds: number[];
 }
 export interface ClientRow extends Client {
   contactName: string | null; contactPosition: string | null;
   contactPhone: string | null; contactEmail: string | null;
   openTasks: number; nextTaskDue: string | null;
 }
-export interface ClientDetail extends Client { contacts: Contact[] }
+export interface ClientDetail extends Client { contacts: Contact[]; accessUserIds?: number[] }
 export type ActivityType = 'comment' | 'call' | 'meeting' | 'email' | 'status_change' | 'system';
 export interface Attachment { id: number; fileName: string; mimeType: string; size: number }
 export interface Activity {
