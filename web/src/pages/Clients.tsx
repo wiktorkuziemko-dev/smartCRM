@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Download, FilterX, Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Download, Eye, FilterX, Plus, Search } from 'lucide-react';
 import type { ClientRow, CustomField, Status, Tag } from '../lib/api';
 import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
@@ -47,7 +47,12 @@ function buildColumns(statuses: Status[], tags: Tag[], fields: CustomField[], vo
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const cols: Column[] = [
     { id: 'name', label: 'Nazwa', value: (r) => r.name, filter: 'text', width: 220,
-      render: (r) => <span className="font-medium text-slate-800">{r.name}</span> },
+      render: (r) => (
+        <span className="inline-flex items-center gap-1.5 font-medium text-slate-800">
+          {r.name}
+          {!r.canEdit && <span title="Tylko podgląd"><Eye size={13} className="text-amber-500" /></span>}
+        </span>
+      ) },
     { id: 'nip', label: 'NIP', value: (r) => r.nip, text: (r) => fmtNip(r.nip), filter: 'text', width: 120 },
     { id: 'voivodeship', label: 'Województwo', value: (r) => r.voivodeship, filter: { options: voivodeships }, width: 140 },
     { id: 'contact', label: 'Osoba kontaktowa', value: (r) => r.contactName, filter: 'text', width: 170,

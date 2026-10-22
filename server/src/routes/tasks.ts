@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { and, asc, eq, or, type SQL } from 'drizzle-orm';
+import { and, asc, eq, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, seesAllClients, type SessionUser } from '../lib/auth.js';
-import { clientVisibleTo, loadClientFor } from '../lib/access.js';
+import { clientEditableBy, clientVisibleTo, loadClientFor } from '../lib/access.js';
 import { syncTaskToGoogle } from '../lib/google.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 
@@ -25,12 +25,19 @@ function visibility(user: SessionUser): SQL | undefined {
   return or(eq(schema.tasks.assigneeId, user.id), clientVisibleTo(user));
 }
 
-async function loadTask(user: SessionUser, id: number, reply: FastifyReply) {
-  const [row] = await db.select({ task: schema.tasks })
+/** Zmieniać zadanie może osoba przypisana albo ktoś z prawem edycji klienta. */
+function editable(user: SessionUser): SQL<boolean> {
+  if (seesAllClients(user)) return sql<boolean>`true`;
+  return sql<boolean>`(${or(eq(schema.tasks.assigneeId, user.id), clientEditableBy(user))})`;
+}
+
+async function loadTaskForEdit(user: SessionUser, id: number, reply: FastifyReply) {
+  const [row] = await db.select({ task: schema.tasks, canEdit: editable(user) })
     .from(schema.tasks)
     .leftJoin(schema.clients, eq(schema.clients.id, schema.tasks.clientId))
     .where(and(eq(schema.tasks.id, id), visibility(user)));
   if (!row) { reply.code(404).send({ error: 'Nie znaleziono zadania' }); return null; }
+  if (!row.canEdit) { reply.code(403).send({ error: 'Masz dostęp do tego klienta tylko do podglądu' }); return null; }
   return row.task;
 }
 
@@ -54,6 +61,7 @@ export async function taskRoutes(app: FastifyInstance) {
       task: schema.tasks,
       clientName: schema.clients.name,
       assigneeName: assignee.fullName,
+      canEdit: editable(req.user),
     })
       .from(schema.tasks)
       .leftJoin(schema.clients, eq(schema.clients.id, schema.tasks.clientId))
@@ -65,13 +73,13 @@ export async function taskRoutes(app: FastifyInstance) {
         q.status === 'all' ? undefined : eq(schema.tasks.done, q.status === 'done'),
       ))
       .orderBy(asc(schema.tasks.done), asc(schema.tasks.dueAt));
-    return rows.map(({ task, clientName, assigneeName }) => ({ ...task, clientName, assigneeName }));
+    return rows.map(({ task, clientName, assigneeName, canEdit }) => ({ ...task, clientName, assigneeName, canEdit }));
   });
 
   app.post('/api/tasks', async (req, reply) => {
     const body = parse(taskBody, req.body, reply);
     if (!body) return;
-    if (body.clientId && !(await loadClientFor(req.user, body.clientId, reply))) return;
+    if (body.clientId && !(await loadClientFor(req.user, body.clientId, reply, 'edit'))) return;
     const [task] = await db.insert(schema.tasks).values({
       ...body,
       assigneeId: resolveAssignee(req.user, body.assigneeId),
@@ -85,9 +93,10 @@ export async function taskRoutes(app: FastifyInstance) {
     const params = parse(idParam, req.params, reply);
     const body = parse(taskBody.partial(), req.body, reply);
     if (!params || !body) return;
-    const task = await loadTask(req.user, params.id, reply);
+    const task = await loadTaskForEdit(req.user, params.id, reply);
     if (!task) return;
-    if (body.clientId && !(await loadClientFor(req.user, body.clientId, reply))) return;
+    // Przeniesienie zadania do innego klienta wymaga prawa edycji tego klienta.
+    if (body.clientId && body.clientId !== task.clientId && !(await loadClientFor(req.user, body.clientId, reply, 'edit'))) return;
     await db.update(schema.tasks).set({
       ...body,
       assigneeId: resolveAssignee(req.user, body.assigneeId, task.assigneeId),
@@ -99,7 +108,7 @@ export async function taskRoutes(app: FastifyInstance) {
   app.delete('/api/tasks/:id', async (req, reply) => {
     const params = parse(idParam, req.params, reply);
     if (!params) return;
-    const task = await loadTask(req.user, params.id, reply);
+    const task = await loadTaskForEdit(req.user, params.id, reply);
     if (!task) return;
     await syncTaskToGoogle(task.id, { deleted: true });
     await db.delete(schema.tasks).where(eq(schema.tasks.id, task.id));

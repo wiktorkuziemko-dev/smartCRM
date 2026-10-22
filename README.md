@@ -6,17 +6,19 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 ## Funkcje
 
 - **Logowanie i role**: Administrator, Kierownik, Handlowiec
-  - *Handlowiec* widzi i edytuje swoich klientów oraz klientów, których udostępnił mu administrator: pojedynczo na karcie klienta albo przez tag.
-  - *Kierownik* widzi wszystkich klientów i zadania, zmienia opiekunów, przypisuje zadania i usuwa klientów.
-  - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami i polami klienta.
+  - *Handlowiec* ma pełny dostęp do swoich klientów (jest ich opiekunem). Do pozostałych klientów dostęp nadaje mu administrator: **brak**, **tylko podgląd** albo **pełna edycja**.
+  - *Kierownik* widzi i edytuje wszystkich klientów i zadania, zmienia opiekunów i przypisuje zadania.
+  - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami, tagami, polami klienta i dostępem handlowców. **Tylko administrator może usuwać klientów.**
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zadania i historia kontaktów.
 - **Historia kontaktów**: komentarze, telefony, spotkania, e-maile oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
 - **Tagi**: listą zarządza administrator (na start: `przetarg`, `prywatne`, `publiczne`), a handlowcy przypisują tagi swoim klientom. Na liście klientów można filtrować po tagu.
-- **Widoczność klientów**: administrator może:
-  - na karcie klienta (sekcja „Widoczność dla handlowców”) wskazać handlowców, którzy widzą tego klienta,
-  - w *Administracja → Tagi* wskazać handlowców, którzy widzą **wszystkich klientów z danym tagiem**.
+- **Dostęp handlowców do klientów** (brak / podgląd / edycja), ustawiany przez administratora:
+  - **na karcie klienta**, w sekcji „Dostęp handlowców”, osobno dla każdego handlowca,
+  - **przez tag**, w *Administracja → Tagi*: dostęp do wszystkich klientów z danym tagiem.
+
+  Zasady: opiekun ma zawsze pełną edycję. Ustawienie na karcie klienta ma pierwszeństwo przed tagami, także jawne „Brak”. Bez ustawienia na karcie liczy się najwyższy poziom spośród tagów klienta. Przy podglądzie handlowiec widzi dane, historię i zadania, ale nie może niczego zmieniać. Wyjątek: zadania przypisane do niego samego może edytować i odhaczać.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
 - **Zadania i przypomnienia**: widok „Moje zadania” (zaległe / dziś / jutro / później), przypomnienie w aplikacji 15 minut przed terminem.
 - **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć pełną automatyczną synchronizację (opis niżej).

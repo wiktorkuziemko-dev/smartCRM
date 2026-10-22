@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react';
-import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow } from '../lib/api';
+import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type AccessLevel } from '../lib/api';
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
@@ -52,7 +52,7 @@ function UsersTab() {
   return (
     <>
       <div className="mb-3 flex justify-between">
-        <p className="text-sm text-slate-500">Handlowiec widzi swoich klientów oraz tych, których mu udostępnisz (na karcie klienta lub przez tagi). Kierownik widzi wszystkich i może zmieniać opiekunów. Administrator dodatkowo zarządza ustawieniami.</p>
+        <p className="text-sm text-slate-500">Handlowiec widzi swoich klientów oraz tych, do których dasz mu dostęp (podgląd lub edycja, na karcie klienta lub przez tagi). Kierownik widzi i edytuje wszystkich klientów. Tylko administrator może usuwać klientów i zarządzać ustawieniami.</p>
         <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj użytkownika</Button>
       </div>
       <Card>
@@ -220,7 +220,7 @@ function TagsTab() {
   return (
     <>
       <div className="mb-3 flex justify-between gap-4">
-        <p className="text-sm text-slate-500">Handlowcy przypisują tagi klientom, wybierając je z tej listy. Przy każdym tagu możesz wskazać handlowców, którzy zobaczą <b>wszystkich klientów z tym tagiem</b>, także tych, którymi się nie opiekują.</p>
+        <p className="text-sm text-slate-500">Handlowcy przypisują tagi klientom, wybierając je z tej listy. Przy każdym tagu możesz nadać handlowcom dostęp do <b>wszystkich klientów z tym tagiem</b> (podgląd lub pełna edycja). Ustawienie dostępu na karcie klienta ma pierwszeństwo przed tagami.</p>
         <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj tag</Button>
       </div>
       <Card>
@@ -229,9 +229,15 @@ function TagsTab() {
           <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-0">
             <div className="w-36"><TagChip name={t.name} color={t.color} /></div>
             <div className="flex flex-1 flex-wrap items-center gap-1.5 text-xs text-slate-500">
-              {t.userIds?.length ? <>Widzą: {t.userIds.map((id) => users.find((u) => u.id === id)).filter(Boolean).map((u) => (
-                <span key={u!.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2"><Avatar name={u!.fullName} size={18} />{u!.fullName}</span>
-              ))}</> : <span className="text-slate-400">brak dodatkowej widoczności</span>}
+              {t.access?.length ? t.access.map((a) => {
+                const u = users.find((x) => x.id === a.userId);
+                return u && (
+                  <span key={a.userId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2">
+                    <Avatar name={u.fullName} size={18} />{u.fullName}
+                    <span className={a.level === 'edit' ? 'text-brand-600' : 'text-amber-600'}>· {a.level === 'edit' ? 'edycja' : 'podgląd'}</span>
+                  </span>
+                );
+              }) : <span className="text-slate-400">brak dodatkowego dostępu</span>}
             </div>
             <button disabled={i === 0} onClick={() => move(tags.map((x) => x.id), i, -1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowUp size={15} /></button>
             <button disabled={i === tags.length - 1} onClick={() => move(tags.map((x) => x.id), i, 1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowDown size={15} /></button>
@@ -248,7 +254,7 @@ function TagsTab() {
 function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
   const qc = useQueryClient();
   const { data: users = [] } = useUsers();
-  const [form, setForm] = useState({ name: tag?.name ?? '', color: tag?.color ?? '#0ea5e9', userIds: tag?.userIds ?? [] });
+  const [form, setForm] = useState({ name: tag?.name ?? '', color: tag?.color ?? '#0ea5e9', access: tag?.access ?? [] });
   const [error, setError] = useState<unknown>(null);
   const sales = users.filter((u) => u.role === 'SALES' && u.active);
 
@@ -262,7 +268,11 @@ function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
     } catch (err) { setError(err); }
   }
 
-  const toggle = (id: number) => setForm((f) => ({ ...f, userIds: f.userIds.includes(id) ? f.userIds.filter((x) => x !== id) : [...f.userIds, id] }));
+  const levelOf = (userId: number): AccessLevel => form.access.find((a) => a.userId === userId)?.level ?? 'none';
+  const setLevel = (userId: number, level: AccessLevel) => setForm((f) => ({
+    ...f,
+    access: [...f.access.filter((a) => a.userId !== userId), ...(level === 'none' ? [] : [{ userId, level }])],
+  }));
 
   return (
     <Modal title={tag ? 'Edytuj tag' : 'Nowy tag'} onClose={onClose}>
@@ -273,13 +283,13 @@ function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
         </div>
         <div><span className="label">Podgląd</span><TagChip name={form.name.toLowerCase() || 'tag'} color={form.color} /></div>
         <div>
-          <span className="label">Handlowcy, którzy widzą wszystkich klientów z tym tagiem</span>
+          <span className="label">Dostęp handlowców do wszystkich klientów z tym tagiem</span>
           <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
             {sales.map((u) => (
-              <label key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
-                <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.userIds.includes(u.id)} onChange={() => toggle(u.id)} />
-                <Avatar name={u.fullName} size={22} /> {u.fullName}
-              </label>
+              <div key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+                <Avatar name={u.fullName} size={22} /> <span className="flex-1">{u.fullName}</span>
+                <LevelSwitch value={levelOf(u.id)} onChange={(l) => setLevel(u.id, l)} />
+              </div>
             ))}
             {sales.length === 0 && <p className="px-2 py-1 text-sm text-slate-400">Brak aktywnych handlowców.</p>}
           </div>
@@ -288,6 +298,20 @@ function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
         <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Anuluj</Button><Button onClick={save} disabled={!form.name.trim()}>Zapisz</Button></div>
       </div>
     </Modal>
+  );
+}
+
+function LevelSwitch({ value, onChange }: { value: AccessLevel; onChange: (l: AccessLevel) => void }) {
+  const options: [AccessLevel, string, string][] = [['none', 'Brak', 'bg-white text-slate-700'], ['view', 'Podgląd', 'bg-amber-500 text-white'], ['edit', 'Edycja', 'bg-brand-600 text-white']];
+  return (
+    <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+      {options.map(([level, label, active]) => (
+        <button key={level} type="button" onClick={() => onChange(level)}
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${value === level ? `${active} shadow-sm` : 'text-slate-500 hover:text-slate-800'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 

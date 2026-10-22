@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole, seesAllClients, type SessionUser } from '../lib/auth.js';
-import { clientVisibleTo, loadClientFor, touchClient } from '../lib/access.js';
+import { clientEditableBy, clientVisibleTo, loadClientFor, touchClient } from '../lib/access.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 
 export const VOIVODESHIPS = [
@@ -129,6 +129,7 @@ export async function clientRoutes(app: FastifyInstance) {
     const rows = await db.select({
       client: schema.clients,
       ownerName: schema.users.fullName,
+      canEdit: clientEditableBy(req.user),
     })
       .from(schema.clients)
       .leftJoin(schema.users, eq(schema.users.id, schema.clients.ownerId))
@@ -155,12 +156,13 @@ export async function clientRoutes(app: FastifyInstance) {
     const stats = new Map(taskStats.map((t) => [t.clientId, t]));
     const tagMap = await tagIdsByClient(ids);
 
-    return rows.map(({ client, ownerName }) => {
+    return rows.map(({ client, ownerName, canEdit }) => {
       const p = primary.get(client.id);
       const s = stats.get(client.id);
       return {
         ...client,
         ownerName,
+        canEdit,
         tagIds: tagMap.get(client.id) ?? [],
         contactName: p?.name ?? null,
         contactPosition: p?.position ?? null,
@@ -181,11 +183,12 @@ export async function clientRoutes(app: FastifyInstance) {
       .where(eq(schema.contacts.clientId, client.id))
       .orderBy(desc(schema.contacts.isPrimary), asc(schema.contacts.id));
     const tagIds = (await tagIdsByClient([client.id])).get(client.id) ?? [];
-    // Lista handlowców, którym admin udostępnił klienta – widoczna tylko dla admina.
-    const accessUserIds = req.user.role === 'ADMIN'
-      ? (await db.select().from(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id))).map((a) => a.userId)
+    // Dostęp ustawiony przez admina dla poszczególnych handlowców – widoczny tylko dla admina.
+    const accessRules = req.user.role === 'ADMIN'
+      ? (await db.select({ userId: schema.clientAccess.userId, level: schema.clientAccess.level })
+        .from(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id)))
       : undefined;
-    return { ...client, ownerName: await userName(client.ownerId), contacts, tagIds, accessUserIds };
+    return { ...client, ownerName: await userName(client.ownerId), contacts, tagIds, accessRules };
   });
 
   app.post('/api/clients', async (req, reply) => {
@@ -210,7 +213,7 @@ export async function clientRoutes(app: FastifyInstance) {
     const params = parse(idParam, req.params, reply);
     const body = parse(clientBody.partial(), req.body, reply);
     if (!params || !body) return;
-    const client = await loadClientFor(req.user, params.id, reply);
+    const client = await loadClientFor(req.user, params.id, reply, 'edit');
     if (!client) return;
     if (body.nip !== undefined && !(await checkDuplicateNip(body.nip, client.id, reply))) return;
 
@@ -235,22 +238,28 @@ export async function clientRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  /** Admin wskazuje handlowców, którzy widzą klienta (oprócz opiekuna). */
-  app.put('/api/clients/:id/access', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
-    const params = parse(idParam, req.params, reply);
-    const body = parse(z.object({ userIds: z.array(z.number().int()).max(200) }), req.body, reply);
+  /**
+   * Admin ustawia dostęp handlowca do klienta: 'none' | 'view' | 'edit'.
+   * null usuwa ustawienie – wtedy o dostępie decydują tagi klienta.
+   */
+  app.put('/api/clients/:id/access/:userId', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(z.object({ id: z.coerce.number().int(), userId: z.coerce.number().int() }), req.params, reply);
+    const body = parse(z.object({ level: z.enum(['none', 'view', 'edit']).nullable() }), req.body, reply);
     if (!params || !body) return;
     const client = await loadClientFor(req.user, params.id, reply);
     if (!client) return;
-    const userIds = [...new Set(body.userIds)].filter((id) => id !== client.ownerId);
-    await db.transaction(async (tx) => {
-      await tx.delete(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id));
-      if (userIds.length) await tx.insert(schema.clientAccess).values(userIds.map((userId) => ({ clientId: client.id, userId })));
-    });
+    if (params.userId === client.ownerId) return reply.code(400).send({ error: 'Opiekun klienta ma zawsze pełny dostęp' });
+    const where = and(eq(schema.clientAccess.clientId, client.id), eq(schema.clientAccess.userId, params.userId));
+    if (body.level === null) {
+      await db.delete(schema.clientAccess).where(where);
+    } else {
+      await db.insert(schema.clientAccess).values({ clientId: client.id, userId: params.userId, level: body.level })
+        .onConflictDoUpdate({ target: [schema.clientAccess.clientId, schema.clientAccess.userId], set: { level: body.level } });
+    }
     return { ok: true };
   });
 
-  app.delete('/api/clients/:id', { preHandler: requireRole('ADMIN', 'MANAGER') }, async (req, reply) => {
+  app.delete('/api/clients/:id', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
     const params = parse(idParam, req.params, reply);
     if (!params) return;
     await db.delete(schema.clients).where(eq(schema.clients.id, params.id));
@@ -267,7 +276,7 @@ export async function clientRoutes(app: FastifyInstance) {
     const params = parse(idParam, req.params, reply);
     const body = parse(contactBody, req.body, reply);
     if (!params || !body) return;
-    const client = await loadClientFor(req.user, params.id, reply);
+    const client = await loadClientFor(req.user, params.id, reply, 'edit');
     if (!client) return;
     const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(schema.contacts).where(eq(schema.contacts.clientId, client.id));
     const [contact] = await db.insert(schema.contacts).values({ ...body, clientId: client.id }).returning();
@@ -281,7 +290,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (!params) return null;
     const [contact] = await db.select().from(schema.contacts).where(eq(schema.contacts.id, params.id));
     if (!contact) { reply.code(404).send({ error: 'Nie znaleziono kontaktu' }); return null; }
-    if (!(await loadClientFor(req.user, contact.clientId, reply))) return null;
+    if (!(await loadClientFor(req.user, contact.clientId, reply, 'edit'))) return null;
     return contact;
   }
 

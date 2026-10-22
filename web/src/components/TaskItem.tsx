@@ -18,11 +18,11 @@ export function TaskItem({ task, onOpen, showClient = true, showAssignee = false
 
   return (
     <div className="group flex items-center gap-3 border-b border-slate-100 px-3 py-2.5 last:border-0 hover:bg-slate-50">
-      <button onClick={toggle} title={task.done ? 'Oznacz jako niewykonane' : 'Oznacz jako wykonane'}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${task.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500'}`}>
+      <button onClick={toggle} disabled={!task.canEdit} title={task.done ? 'Oznacz jako niewykonane' : 'Oznacz jako wykonane'}
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${task.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 text-transparent enabled:hover:border-emerald-500 enabled:hover:text-emerald-500'} disabled:cursor-not-allowed disabled:opacity-50`}>
         <Check size={12} strokeWidth={3} />
       </button>
-      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button onClick={task.canEdit ? onOpen : undefined} className={`min-w-0 flex-1 text-left ${task.canEdit ? '' : 'cursor-default'}`}>
         <div className={`truncate text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{task.title}</div>
         {showClient && task.clientName && (
           <Link to={`/clients/${task.clientId}`} onClick={(e) => e.stopPropagation()} className="text-xs text-brand-600 hover:underline">{task.clientName}</Link>

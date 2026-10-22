@@ -49,7 +49,7 @@ export async function activityRoutes(app: FastifyInstance) {
   app.post('/api/clients/:id/activities', async (req, reply) => {
     const params = parse(idParam, req.params, reply);
     if (!params) return;
-    if (!(await loadClientFor(req.user, params.id, reply))) return;
+    if (!(await loadClientFor(req.user, params.id, reply, 'edit'))) return;
 
     let type = 'comment';
     let content = '';
@@ -104,7 +104,7 @@ export async function activityRoutes(app: FastifyInstance) {
     if (!params) return;
     const [activity] = await db.select().from(schema.activities).where(eq(schema.activities.id, params.id));
     if (!activity) return reply.code(404).send({ error: 'Nie znaleziono wpisu' });
-    if (!(await loadClientFor(req.user, activity.clientId, reply))) return;
+    if (!(await loadClientFor(req.user, activity.clientId, reply, 'edit'))) return;
     if (activity.authorId !== req.user.id && req.user.role !== 'ADMIN') {
       return reply.code(403).send({ error: 'Możesz usuwać tylko własne wpisy' });
     }

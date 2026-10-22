@@ -4,6 +4,8 @@ import {
 
 export const roleEnum = pgEnum('role', ['ADMIN', 'MANAGER', 'SALES']);
 export const fieldTypeEnum = pgEnum('field_type', ['text', 'textarea', 'number', 'date', 'select', 'checkbox']);
+/** Poziom dostępu handlowca do klienta: brak / tylko podgląd / pełna edycja. */
+export const accessLevelEnum = pgEnum('access_level', ['none', 'view', 'edit']);
 export const activityTypeEnum = pgEnum('activity_type', ['comment', 'call', 'meeting', 'email', 'status_change', 'system']);
 
 export const users = pgTable('users', {
@@ -119,17 +121,23 @@ export const clientTags = pgTable('client_tags', {
   tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
 }, (t) => [primaryKey({ columns: [t.clientId, t.tagId] }), index('client_tags_tag_idx').on(t.tagId)]);
 
-/** Dodatkowa widoczność: handlowiec widzi konkretnego klienta (oprócz własnych). */
+/**
+ * Dostęp handlowca do konkretnego klienta ustawiony przez admina.
+ * Ma pierwszeństwo przed dostępem wynikającym z tagów (także 'none' – jawny brak dostępu).
+ */
 export const clientAccess = pgTable('client_access', {
   clientId: integer('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  level: accessLevelEnum('level').notNull().default('edit'),
 }, (t) => [primaryKey({ columns: [t.clientId, t.userId] }), index('client_access_user_idx').on(t.userId)]);
 
-/** Dodatkowa widoczność: handlowiec widzi wszystkich klientów oznaczonych danym tagiem. */
+/** Dostęp handlowca do wszystkich klientów oznaczonych danym tagiem ('view' lub 'edit'). */
 export const tagAccess = pgTable('tag_access', {
   tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  level: accessLevelEnum('level').notNull().default('edit'),
 }, (t) => [primaryKey({ columns: [t.tagId, t.userId] }), index('tag_access_user_idx').on(t.userId)]);
 
 export type User = typeof users.$inferSelect;
 export type Role = User['role'];
+export type AccessLevel = (typeof accessLevelEnum.enumValues)[number];

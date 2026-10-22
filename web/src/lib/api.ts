@@ -8,7 +8,11 @@ export interface UserRow {
   id: number; fullName: string; role: Role; active: boolean;
   login?: string; email?: string | null; googleConnected?: boolean;
 }
-export interface Tag { id: number; name: string; color: string; position: number; userIds?: number[] }
+export type AccessLevel = 'none' | 'view' | 'edit';
+export interface Tag {
+  id: number; name: string; color: string; position: number;
+  access?: { userId: number; level: 'view' | 'edit' }[]; // tylko dla admina
+}
 export interface Status { id: number; name: string; color: string; position: number; active: boolean }
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox';
 export interface CustomField {
@@ -26,13 +30,17 @@ export interface Client {
   statusId: number | null; ownerId: number | null; ownerName: string | null;
   custom: Record<string, unknown>; createdAt: string; updatedAt: string;
   tagIds: number[];
+  canEdit: boolean; // false = tylko podgląd
 }
 export interface ClientRow extends Client {
   contactName: string | null; contactPosition: string | null;
   contactPhone: string | null; contactEmail: string | null;
   openTasks: number; nextTaskDue: string | null;
 }
-export interface ClientDetail extends Client { contacts: Contact[]; accessUserIds?: number[] }
+export interface ClientDetail extends Client {
+  contacts: Contact[];
+  accessRules?: { userId: number; level: AccessLevel }[]; // tylko dla admina
+}
 export type ActivityType = 'comment' | 'call' | 'meeting' | 'email' | 'status_change' | 'system';
 export interface Attachment { id: number; fileName: string; mimeType: string; size: number }
 export interface Activity {
@@ -43,6 +51,7 @@ export interface Task {
   id: number; title: string; notes: string | null; dueAt: string; done: boolean;
   clientId: number | null; clientName: string | null;
   assigneeId: number; assigneeName: string; googleEventId: string | null;
+  canEdit: boolean;
 }
 export interface Dashboard {
   byStatus: { statusId: number | null; count: number; potential: number }[];

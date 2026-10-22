@@ -21,7 +21,7 @@ const TYPE_META: Record<ActivityType, { label: string; icon: typeof Phone; tone:
   system: { label: 'system', icon: Info, tone: 'bg-slate-100 text-slate-500' },
 };
 
-export function ActivityFeed({ clientId }: { clientId: number }) {
+export function ActivityFeed({ clientId, readOnly }: { clientId: number; readOnly?: boolean }) {
   const { data: activities = [] } = useQuery({
     queryKey: ['activities', clientId],
     queryFn: () => api.get<Activity[]>(`/api/clients/${clientId}/activities`),
@@ -32,14 +32,14 @@ export function ActivityFeed({ clientId }: { clientId: number }) {
   return (
     <div>
       <div className="space-y-4">
-        {ordered.map((a) => <ActivityItem key={a.id} activity={a} />)}
+        {ordered.map((a) => <ActivityItem key={a.id} activity={a} readOnly={readOnly} />)}
       </div>
-      <Composer clientId={clientId} />
+      {!readOnly && <Composer clientId={clientId} />}
     </div>
   );
 }
 
-function ActivityItem({ activity: a }: { activity: Activity }) {
+function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?: boolean }) {
   const { data: me } = useMe();
   const qc = useQueryClient();
   const meta = TYPE_META[a.type];
@@ -73,7 +73,7 @@ function ActivityItem({ activity: a }: { activity: Activity }) {
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${meta.tone}`}><meta.icon size={11} />{meta.label}</span>
           )}
           <span className="text-xs text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtAgo(a.createdAt)}</span>
-          {(a.authorId === me?.id || me?.role === 'ADMIN') && (
+          {!readOnly && (a.authorId === me?.id || me?.role === 'ADMIN') && (
             <button onClick={remove} className="ml-auto text-slate-300 opacity-0 transition hover:text-red-500 group-hover:opacity-100" title="Usuń wpis">
               <Trash2 size={14} />
             </button>

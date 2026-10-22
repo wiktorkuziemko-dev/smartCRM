@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Eye, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
-import { api, type ClientDetail, type Contact, type Task } from '../lib/api';
+import { Briefcase, Eye, Lock, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
+import { api, type AccessLevel, type ClientDetail, type Contact, type Task } from '../lib/api';
 import { fmtDateTime, fmtNip, fmtNumber } from '../lib/format';
 import { seesAll, useFields, useMe, useStatuses, useTags, useTasks, useUsers } from '../lib/queries';
 import { ActivityFeed } from './ActivityFeed';
@@ -9,7 +9,7 @@ import { ClientForm } from './ClientForm';
 import { formatCustomValue } from './CustomFieldInput';
 import { TaskForm } from './TaskForm';
 import { TaskItem } from './TaskItem';
-import { Avatar, Button, Empty, ErrorText, Field, Modal, TagChip, TagPicker } from './ui';
+import { Avatar, Button, Empty, ErrorText, Field, Modal, TagPicker } from './ui';
 
 export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: () => void }) {
   const { data: me } = useMe();
@@ -27,6 +27,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
   if (error) return <div className="p-6"><ErrorText error={error} /></div>;
   if (!client) return <div className="p-6 text-sm text-slate-400">Ładowanie…</div>;
 
+  const canEdit = client.canEdit;
   const primary = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
   const others = client.contacts.filter((c) => c !== primary);
 
@@ -47,10 +48,10 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
             <p className="mt-0.5 text-sm text-white/75">
               {[client.nip && `NIP ${fmtNip(client.nip)}`, client.voivodeship, client.ownerName && `Opiekun: ${client.ownerName}`].filter(Boolean).join(' · ')}
             </p>
-            <HeaderTags client={client} />
+            <HeaderTags client={client} canEdit={canEdit} />
           </div>
-          <button onClick={() => setEditing(true)} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Edytuj"><Pencil size={17} /></button>
-          {seesAll(me) && <button onClick={remove} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Usuń klienta"><Trash2 size={17} /></button>}
+          {canEdit && <button onClick={() => setEditing(true)} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Edytuj"><Pencil size={17} /></button>}
+          {me?.role === 'ADMIN' && <button onClick={remove} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Usuń klienta"><Trash2 size={17} /></button>}
           <button onClick={onClose} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Zamknij"><X size={18} /></button>
         </div>
 
@@ -67,16 +68,24 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
                   {primary.email && <a href={`mailto:${primary.email}`} className="inline-flex items-center gap-1 hover:underline"><Mail size={13} />{primary.email}</a>}
                 </div>
               </div>
-              <button onClick={() => setContactForm({ contact: primary })} className="self-start rounded-md p-1 text-white/70 hover:bg-white/15 hover:text-white"><Pencil size={14} /></button>
+              {canEdit && <button onClick={() => setContactForm({ contact: primary })} className="self-start rounded-md p-1 text-white/70 hover:bg-white/15 hover:text-white"><Pencil size={14} /></button>}
             </div>
+          ) : !canEdit ? (
+            <span className="text-sm text-white/75">Brak osoby kontaktowej</span>
           ) : (
             <button onClick={() => setContactForm({})} className="inline-flex items-center gap-1 text-sm text-white/90 hover:underline"><Plus size={14} /> Dodaj osobę kontaktową</button>
           )}
         </div>
       </div>
 
+      {!canEdit && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-sm text-amber-800">
+          <Lock size={15} /> Tylko podgląd – nie możesz edytować tego klienta.
+        </div>
+      )}
+
       <div className="flex-1 space-y-6 px-5 pt-5">
-        <StatusStepper client={client} />
+        <StatusStepper client={client} canEdit={canEdit} />
 
         {client.description && (
           <Section title="Opis"><p className="whitespace-pre-wrap text-sm text-slate-700">{client.description}</p></Section>
@@ -95,7 +104,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           </dl>
         </Section>
 
-        <Section title={`Osoby kontaktowe (${client.contacts.length})`} action={<button onClick={() => setContactForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
+        <Section title={`Osoby kontaktowe (${client.contacts.length})`} action={canEdit && <button onClick={() => setContactForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
           {others.length === 0 ? <p className="text-sm text-slate-400">{primary ? 'Brak innych osób.' : 'Brak osób kontaktowych.'}</p> : (
             <div className="space-y-2">
               {others.map((c) => (
@@ -108,7 +117,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
                       {c.email && <a href={`mailto:${c.email}`} className="hover:text-brand-600">{c.email}</a>}
                     </div>
                   </div>
-                  <button onClick={() => setContactForm({ contact: c })} className="text-slate-400 hover:text-brand-600"><Pencil size={14} /></button>
+                  {canEdit && <button onClick={() => setContactForm({ contact: c })} className="text-slate-400 hover:text-brand-600"><Pencil size={14} /></button>}
                 </div>
               ))}
             </div>
@@ -117,7 +126,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
 
         {me?.role === 'ADMIN' && <VisibilitySection client={client} />}
 
-        <Section title={`Zadania (${tasks.length})`} action={<button onClick={() => setTaskForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
+        <Section title={`Zadania (${tasks.length})`} action={canEdit && <button onClick={() => setTaskForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             {tasks.length === 0 ? <Empty>Brak otwartych zadań</Empty> : tasks.map((t) => (
               <TaskItem key={t.id} task={t} showClient={false} showAssignee={seesAll(me)} onOpen={() => setTaskForm({ task: t })} />
@@ -126,7 +135,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
         </Section>
 
         <Section title="Historia kontaktów">
-          <ActivityFeed clientId={clientId} />
+          <ActivityFeed clientId={clientId} readOnly={!canEdit} />
         </Section>
       </div>
 
@@ -138,7 +147,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
 }
 
 /** Tagi w nagłówku panelu – handlowiec może je szybko zmienić. */
-function HeaderTags({ client }: { client: ClientDetail }) {
+function HeaderTags({ client, canEdit }: { client: ClientDetail; canEdit: boolean }) {
   const { data: tags = [] } = useTags();
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
@@ -155,9 +164,11 @@ function HeaderTags({ client }: { client: ClientDetail }) {
       {current.map((t) => (
         <span key={t.id} className="rounded-md bg-white/90 px-1.5 py-0.5 text-xs font-medium" style={{ color: t.color }}>#{t.name}</span>
       ))}
-      <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 rounded-md border border-white/30 px-1.5 py-0.5 text-xs text-white/85 hover:bg-white/15">
-        <TagIcon size={11} /> {current.length ? 'Zmień' : 'Dodaj tag'}
-      </button>
+      {canEdit && (
+        <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 rounded-md border border-white/30 px-1.5 py-0.5 text-xs text-white/85 hover:bg-white/15">
+          <TagIcon size={11} /> {current.length ? 'Zmień' : 'Dodaj tag'}
+        </button>
+      )}
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
@@ -171,58 +182,76 @@ function HeaderTags({ client }: { client: ClientDetail }) {
   );
 }
 
-/** Admin: którzy handlowcy (oprócz opiekuna) widzą tego klienta. */
+const LEVELS: { level: AccessLevel; label: string }[] = [
+  { level: 'none', label: 'Brak' },
+  { level: 'view', label: 'Podgląd' },
+  { level: 'edit', label: 'Edycja' },
+];
+const LEVEL_RANK: Record<AccessLevel, number> = { none: 0, view: 1, edit: 2 };
+
+/** Admin: poziom dostępu każdego handlowca do tego klienta (brak / podgląd / pełna edycja). */
 function VisibilitySection({ client }: { client: ClientDetail }) {
   const { data: users = [] } = useUsers();
   const { data: tags = [] } = useTags();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
   const sales = users.filter((u) => u.role === 'SALES' && u.active && u.id !== client.ownerId);
-  const direct = client.accessUserIds ?? [];
-  // Handlowcy, którzy widzą klienta dzięki tagom (ustawienia w Administracja → Tagi).
-  const viaTags = new Map<number, string[]>();
-  for (const t of tags.filter((t) => client.tagIds.includes(t.id))) {
-    for (const uid of t.userIds ?? []) viaTags.set(uid, [...(viaTags.get(uid) ?? []), t.name]);
+  const rules = new Map((client.accessRules ?? []).map((r) => [r.userId, r.level]));
+
+  // Poziom wynikający z tagów klienta (ustawienia w Administracja → Tagi).
+  function fromTags(userId: number): { level: AccessLevel; tags: string[] } {
+    let level: AccessLevel = 'none';
+    const names: string[] = [];
+    for (const t of tags.filter((t) => client.tagIds.includes(t.id))) {
+      const a = t.access?.find((x) => x.userId === userId);
+      if (!a) continue;
+      names.push(t.name);
+      if (LEVEL_RANK[a.level] > LEVEL_RANK[level]) level = a.level;
+    }
+    return { level, tags: names };
   }
 
-  async function toggle(userId: number) {
-    const next = direct.includes(userId) ? direct.filter((x) => x !== userId) : [...direct, userId];
-    await api.put(`/api/clients/${client.id}/access`, { userIds: next });
+  async function set(userId: number, level: AccessLevel | null) {
+    await api.put(`/api/clients/${client.id}/access/${userId}`, { level });
     await qc.invalidateQueries({ queryKey: ['client', client.id] });
   }
 
-  const visible = sales.filter((u) => direct.includes(u.id) || viaTags.has(u.id));
-
   return (
-    <Section title="Widoczność dla handlowców" action={
-      <button onClick={() => setEditing((v) => !v)} className="text-xs font-medium text-brand-600 hover:text-brand-700">{editing ? 'Gotowe' : 'Zmień'}</button>
-    }>
+    <Section title="Dostęp handlowców">
       <p className="mb-2 text-xs text-slate-500">
-        Opiekun: <b>{client.ownerName ?? 'brak'}</b>. Kierownicy i administratorzy widzą wszystkich klientów.
+        Opiekun (<b>{client.ownerName ?? 'brak'}</b>) ma zawsze pełną edycję, a kierownicy i administratorzy widzą wszystkich klientów.
+        Ustawienie tutaj ma pierwszeństwo przed dostępem z tagów.
       </p>
-      {editing ? (
-        <div className="space-y-1 rounded-xl border border-slate-200 p-2">
-          {sales.map((u) => (
-            <label key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
-              <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={direct.includes(u.id)} onChange={() => toggle(u.id)} />
-              <Avatar name={u.fullName} size={22} /> <span className="flex-1">{u.fullName}</span>
-              {viaTags.has(u.id) && <span className="text-xs text-slate-400">przez tag {viaTags.get(u.id)!.map((n) => `#${n}`).join(', ')}</span>}
-            </label>
-          ))}
-          {sales.length === 0 && <p className="px-2 py-1 text-sm text-slate-400">Brak innych handlowców.</p>}
-        </div>
-      ) : visible.length ? (
-        <div className="flex flex-wrap gap-2">
-          {visible.map((u) => (
-            <span key={u.id} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-0.5 pl-0.5 pr-2 text-xs">
-              <Avatar name={u.fullName} size={20} /> {u.fullName}
-              {!direct.includes(u.id) && <TagChip name={viaTags.get(u.id)![0]} color="#64748b" />}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="flex items-center gap-1.5 text-sm text-slate-400"><Eye size={14} /> Tylko opiekun.</p>
-      )}
+      <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+        {sales.map((u) => {
+          const explicit = rules.get(u.id);
+          const tag = fromTags(u.id);
+          const effective = explicit ?? tag.level;
+          return (
+            <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+              <Avatar name={u.fullName} size={24} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm">{u.fullName}</div>
+                <div className="text-xs text-slate-400">
+                  {explicit
+                    ? <>ustawione ręcznie · <button onClick={() => set(u.id, null)} className="text-brand-600 hover:underline">wg tagów</button></>
+                    : tag.tags.length ? `z tagu ${tag.tags.map((n) => `#${n}`).join(', ')}` : 'domyślnie'}
+                </div>
+              </div>
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+                {LEVELS.map(({ level, label }) => (
+                  <button key={level} onClick={() => set(u.id, level)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${effective === level
+                      ? `${level === 'none' ? 'bg-white text-slate-700' : level === 'view' ? 'bg-amber-500 text-white' : 'bg-brand-600 text-white'} shadow-sm ${explicit ? '' : 'opacity-70'}`
+                      : 'text-slate-500 hover:text-slate-800'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {sales.length === 0 && <p className="flex items-center gap-1.5 px-3 py-3 text-sm text-slate-400"><Eye size={14} /> Brak innych handlowców.</p>}
+      </div>
     </Section>
   );
 }
@@ -249,14 +278,14 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Lejek: stopnie statusu zdefiniowane przez admina; kliknięcie zmienia status. */
-function StatusStepper({ client }: { client: ClientDetail }) {
+function StatusStepper({ client, canEdit }: { client: ClientDetail; canEdit: boolean }) {
   const { data: statuses = [] } = useStatuses();
   const qc = useQueryClient();
   const visible = statuses.filter((s) => s.active || s.id === client.statusId);
   const currentIndex = visible.findIndex((s) => s.id === client.statusId);
 
   async function change(statusId: number) {
-    if (statusId === client.statusId) return;
+    if (!canEdit || statusId === client.statusId) return;
     await api.put(`/api/clients/${client.id}`, { statusId });
     await Promise.all(['client', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k, client.id] })));
     qc.invalidateQueries({ queryKey: ['clients'] });
@@ -271,7 +300,7 @@ function StatusStepper({ client }: { client: ClientDetail }) {
       <div className="flex gap-1">
         {visible.map((s, i) => (
           <button key={s.id} onClick={() => change(s.id)} title={s.name}
-            className="group relative h-2.5 flex-1 rounded-full transition hover:scale-y-150"
+            className={`group relative h-2.5 flex-1 rounded-full transition ${canEdit ? 'hover:scale-y-150' : 'cursor-default'}`}
             style={{ backgroundColor: i <= currentIndex ? visible[currentIndex].color : '#e2e8f0' }}>
             <span className="pointer-events-none absolute -top-8 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white group-hover:block">{s.name}</span>
           </button>

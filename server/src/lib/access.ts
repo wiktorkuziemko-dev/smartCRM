@@ -1,46 +1,77 @@
-import { and, eq, exists, or, type SQL } from 'drizzle-orm';
+import { and, eq, exists, inArray, not, or, sql, type SQL } from 'drizzle-orm';
 import type { FastifyReply } from 'fastify';
 import { db, schema } from '../db/index.js';
 import { seesAllClients, type SessionUser } from './auth.js';
+import type { AccessLevel } from '../db/schema.js';
 
 /**
- * Warunek SQL: klienci widoczni dla użytkownika.
- * Kierownik i admin widzą wszystkich. Handlowiec widzi klientów, którymi się opiekuje,
- * klientów wskazanych mu przez admina oraz klientów z tagami, do których admin dał mu dostęp.
+ * Zasady dostępu handlowca do klienta:
+ * 1. Opiekun klienta ma zawsze pełną edycję.
+ * 2. Jeśli admin ustawił dostęp do tego klienta (client_access) – obowiązuje on (brak / podgląd / edycja).
+ * 3. W przeciwnym razie decydują tagi klienta (tag_access) – najwyższy z poziomów.
+ * Kierownik i admin mają pełny dostęp do wszystkich klientów.
  */
-export function clientVisibleTo(user: SessionUser): SQL | undefined {
-  if (seesAllClients(user)) return undefined;
-  return or(
-    eq(schema.clients.ownerId, user.id),
-    exists(db.select().from(schema.clientAccess).where(and(
-      eq(schema.clientAccess.clientId, schema.clients.id),
-      eq(schema.clientAccess.userId, user.id),
-    ))),
-    exists(db.select().from(schema.clientTags)
-      .innerJoin(schema.tagAccess, eq(schema.tagAccess.tagId, schema.clientTags.tagId))
-      .where(and(
-        eq(schema.clientTags.clientId, schema.clients.id),
-        eq(schema.tagAccess.userId, user.id),
-      ))),
-  );
+function directRule(userId: number, levels?: AccessLevel[]) {
+  return exists(db.select().from(schema.clientAccess).where(and(
+    eq(schema.clientAccess.clientId, schema.clients.id),
+    eq(schema.clientAccess.userId, userId),
+    levels ? inArray(schema.clientAccess.level, levels) : undefined,
+  )));
 }
 
-/** Zwraca klienta, jeśli użytkownik ma do niego dostęp; w przeciwnym razie wysyła 404/403. */
-export async function loadClientFor(user: SessionUser, clientId: number, reply: FastifyReply) {
-  const [client] = await db.select().from(schema.clients).where(eq(schema.clients.id, clientId));
-  if (!client) {
+function tagRule(userId: number, levels: AccessLevel[]) {
+  return exists(db.select().from(schema.clientTags)
+    .innerJoin(schema.tagAccess, eq(schema.tagAccess.tagId, schema.clientTags.tagId))
+    .where(and(
+      eq(schema.clientTags.clientId, schema.clients.id),
+      eq(schema.tagAccess.userId, userId),
+      inArray(schema.tagAccess.level, levels),
+    )));
+}
+
+function accessCondition(user: SessionUser, levels: AccessLevel[]): SQL {
+  return or(
+    eq(schema.clients.ownerId, user.id),
+    directRule(user.id, levels),
+    and(not(directRule(user.id)), tagRule(user.id, levels)),
+  )!;
+}
+
+/** Warunek SQL: klienci, których użytkownik może oglądać. */
+export function clientVisibleTo(user: SessionUser): SQL | undefined {
+  if (seesAllClients(user)) return undefined;
+  return accessCondition(user, ['view', 'edit']);
+}
+
+/** Wyrażenie SQL (boolean): czy użytkownik może edytować klienta z bieżącego wiersza. */
+export function clientEditableBy(user: SessionUser): SQL<boolean> {
+  if (seesAllClients(user)) return sql<boolean>`true`;
+  return sql<boolean>`(${accessCondition(user, ['edit'])})`;
+}
+
+/**
+ * Zwraca klienta, jeśli użytkownik ma do niego wymagany dostęp; w przeciwnym razie wysyła 404/403.
+ * need = 'view' do odczytu, 'edit' do zmian (dane, kontakty, historia, zadania).
+ */
+export async function loadClientFor(user: SessionUser, clientId: number, reply: FastifyReply, need: 'view' | 'edit' = 'view') {
+  const [row] = await db.select({
+    client: schema.clients,
+    visible: clientVisibleTo(user) ? sql<boolean>`(${clientVisibleTo(user)})` : sql<boolean>`true`,
+    canEdit: clientEditableBy(user),
+  }).from(schema.clients).where(eq(schema.clients.id, clientId));
+  if (!row) {
     reply.code(404).send({ error: 'Nie znaleziono klienta' });
     return null;
   }
-  if (!seesAllClients(user)) {
-    const [visible] = await db.select({ id: schema.clients.id }).from(schema.clients)
-      .where(and(eq(schema.clients.id, clientId), clientVisibleTo(user)));
-    if (!visible) {
-      reply.code(403).send({ error: 'Brak dostępu do tego klienta' });
-      return null;
-    }
+  if (!row.visible) {
+    reply.code(403).send({ error: 'Brak dostępu do tego klienta' });
+    return null;
   }
-  return client;
+  if (need === 'edit' && !row.canEdit) {
+    reply.code(403).send({ error: 'Masz dostęp do tego klienta tylko do podglądu' });
+    return null;
+  }
+  return { ...row.client, canEdit: row.canEdit };
 }
 
 export async function touchClient(clientId: number) {
