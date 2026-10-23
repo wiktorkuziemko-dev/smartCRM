@@ -1,8 +1,11 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { and, asc, eq, or, sql, type SQL } from 'drizzle-orm';
+import fs from 'node:fs';
+import path from 'node:path';
+import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
+import { config } from '../config.js';
 import { requireAuth, seesAllClients, type SessionUser } from '../lib/auth.js';
 import { clientEditableBy, clientVisibleTo, loadClientFor } from '../lib/access.js';
 import { syncTaskToGoogle } from '../lib/google.js';
@@ -10,6 +13,7 @@ import { idParam, optionalText, parse } from '../lib/validate.js';
 
 const taskBody = z.object({
   title: z.string().trim().min(1, 'Tytuł jest wymagany').max(255),
+  type: z.enum(['task', 'call', 'meeting', 'email']).default('task'),
   notes: optionalText(),
   dueAt: z.coerce.date(),
   done: z.boolean().default(false),
@@ -111,6 +115,14 @@ export async function taskRoutes(app: FastifyInstance) {
     const task = await loadTaskForEdit(req.user, params.id, reply);
     if (!task) return;
     await syncTaskToGoogle(task.id, { deleted: true });
+    // Wpis w historii, którym zaplanowano zadanie, znika razem z nim (wraz z załącznikami).
+    const linked = await db.select({ id: schema.activities.id }).from(schema.activities).where(eq(schema.activities.taskId, task.id));
+    if (linked.length) {
+      const ids = linked.map((a) => a.id);
+      const files = await db.select().from(schema.attachments).where(inArray(schema.attachments.activityId, ids));
+      await db.delete(schema.activities).where(inArray(schema.activities.id, ids));
+      files.forEach((f) => fs.rmSync(path.join(config.uploadDir, f.storedName), { force: true }));
+    }
     await db.delete(schema.tasks).where(eq(schema.tasks.id, task.id));
     return { ok: true };
   });

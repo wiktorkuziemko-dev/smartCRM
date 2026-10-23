@@ -1,11 +1,13 @@
 import {
-  pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index, primaryKey,
+  pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index, primaryKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['ADMIN', 'MANAGER', 'SALES']);
 export const fieldTypeEnum = pgEnum('field_type', ['text', 'textarea', 'number', 'date', 'select', 'checkbox']);
 /** Poziom dostępu handlowca do klienta: brak / tylko podgląd / pełna edycja. */
 export const accessLevelEnum = pgEnum('access_level', ['none', 'view', 'edit']);
+/** Rodzaj zadania – telefon, spotkanie i e-mail planuje się z historii kontaktów klienta. */
+export const taskTypeEnum = pgEnum('task_type', ['task', 'call', 'meeting', 'email']);
 export const activityTypeEnum = pgEnum('activity_type', ['comment', 'call', 'meeting', 'email', 'status_change', 'system']);
 
 export const users = pgTable('users', {
@@ -83,6 +85,8 @@ export const activities = pgTable('activities', {
   authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
   type: activityTypeEnum('type').notNull().default('comment'),
   content: text('content').notNull().default(''),
+  // Zaplanowany telefon/spotkanie/e-mail: wpis w historii powiązany z zadaniem.
+  taskId: integer('task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('activities_client_idx').on(t.clientId)]);
 
@@ -98,6 +102,7 @@ export const attachments = pgTable('attachments', {
 export const tasks = pgTable('tasks', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 255 }).notNull(),
+  type: taskTypeEnum('type').notNull().default('task'),
   notes: text('notes'),
   dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
   done: boolean('done').notNull().default(false),
@@ -140,4 +145,5 @@ export const tagAccess = pgTable('tag_access', {
 
 export type User = typeof users.$inferSelect;
 export type Role = User['role'];
+export type TaskType = (typeof taskTypeEnum.enumValues)[number];
 export type AccessLevel = (typeof accessLevelEnum.enumValues)[number];

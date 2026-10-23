@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Download, Eye, FilterX, P
 import type { ClientRow, CustomField, Status, Tag } from '../lib/api';
 import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
-import { useClients, useFields, useStatuses, useTags, useUsers, useVoivodeships } from '../lib/queries';
+import { useClients, useFields, useStatuses, useTags, useVoivodeships } from '../lib/queries';
 import { ClientPanel } from '../components/ClientPanel';
 import { ClientForm } from '../components/ClientForm';
 import { formatCustomValue } from '../components/CustomFieldInput';
@@ -96,7 +96,6 @@ export function ClientsPage() {
   const { data: statuses = [] } = useStatuses();
   const { data: fields = [] } = useFields();
   const { data: tags = [] } = useTags();
-  const { data: users = [] } = useUsers();
   const { data: voivodeships = [] } = useVoivodeships();
 
   const [search, setSearch] = useState('');
@@ -110,8 +109,10 @@ export function ClientsPage() {
   useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); } catch { /* ignoruj */ } }, [hidden]);
 
   const allColumns = useMemo(
-    () => buildColumns(statuses, tags, fields, voivodeships, users.map((u) => u.fullName)),
-    [statuses, tags, fields, voivodeships, users],
+    // Filtr „Opiekun” pokazuje tylko osoby, które są opiekunami widocznych klientów.
+    () => buildColumns(statuses, tags, fields, voivodeships,
+      [...new Set(clients.map((c) => c.ownerName).filter((n): n is string => Boolean(n)))].sort((a, b) => a.localeCompare(b, 'pl'))),
+    [statuses, tags, fields, voivodeships, clients],
   );
   const columns = allColumns.filter((c) => !hidden.includes(c.id));
   const textOf = (c: Column, r: ClientRow) => (c.text ? c.text(r) : String(c.value(r) ?? ''));

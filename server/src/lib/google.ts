@@ -11,6 +11,8 @@ import { db, schema } from '../db/index.js';
 const SCOPES = 'openid email https://www.googleapis.com/auth/calendar.events';
 const redirectUri = () => `${config.appUrl}/api/google/callback`;
 
+const TYPE_PREFIX = { task: '', call: '📞 Telefon: ', meeting: '🤝 Spotkanie: ', email: '✉️ E-mail: ' } as const;
+
 // Jednorazowe tokeny "state" chroniące przed CSRF (ważne 10 minut).
 const pendingStates = new Map<string, { userId: number; expires: number }>();
 
@@ -111,7 +113,7 @@ export async function syncTaskToGoogle(taskId: number, opts: { deleted?: boolean
     const start = task.dueAt;
     const end = new Date(start.getTime() + 30 * 60_000);
     const body = JSON.stringify({
-      summary: clientName ? `${task.title} – ${clientName}` : task.title,
+      summary: `${TYPE_PREFIX[task.type]}${clientName ? `${task.title} – ${clientName}` : task.title}`,
       description: [task.notes, task.clientId ? `${config.appUrl}/clients/${task.clientId}` : ''].filter(Boolean).join('\n\n'),
       start: { dateTime: start.toISOString(), timeZone: config.timezone },
       end: { dateTime: end.toISOString(), timeZone: config.timezone },

@@ -10,8 +10,10 @@ Działa w Dockerze na serwerze w sieci lokalnej.
   - *Kierownik* widzi i edytuje wszystkich klientów i zadania, zmienia opiekunów i przypisuje zadania.
   - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami, tagami, polami klienta i dostępem handlowców. **Tylko administrator może usuwać klientów.**
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
-- **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zadania i historia kontaktów.
-- **Historia kontaktów**: komentarze, telefony, spotkania, e-maile oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
+- **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zaplanowane kontakty i historia kontaktów.
+- **Historia kontaktów**: komentarze oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
+  - **Telefon, spotkanie i e-mail** wybiera się z datą i godziną: wpis od razu tworzy zadanie, które widać w historii i na liście zadań, z możliwością odhaczenia. Termin w przeszłości oznacza kontakt, który już się odbył, więc zapisuje się jako wykonany.
+  - Handlowiec planuje kontakty tylko dla siebie. Kierownik i administrator mogą wskazać inną osobę.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
 - **Tagi**: listą zarządza administrator (na start: `przetarg`), a handlowcy przypisują tagi klientom, które mogą edytować. Na liście klientów można filtrować po tagu.
 - **Dostęp handlowców do klientów** (brak / podgląd / edycja), ustawiany przez administratora:
@@ -20,7 +22,7 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 
   Zasady: opiekun ma zawsze pełną edycję. Ustawienie na karcie klienta ma pierwszeństwo przed tagami, także jawne „Brak”. Bez ustawienia na karcie liczy się najwyższy poziom spośród tagów klienta. Przy podglądzie handlowiec widzi dane, historię i zadania, ale nie może niczego zmieniać. Wyjątek: zadania przypisane do niego samego może edytować i odhaczać.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
-- **Zadania i przypomnienia**: widok „Moje zadania” (zaległe / dziś / jutro / później), przypomnienie w aplikacji 15 minut przed terminem.
+- **Zadania i przypomnienia**: widok „Moje zadania” i pulpit (zaległe / dziś / najbliższe 7 dni, późniejsze zwinięte), przypomnienie w aplikacji 15 minut przed terminem.
 - **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć pełną automatyczną synchronizację (opis niżej).
 - Kontrola duplikatów po NIP.
 

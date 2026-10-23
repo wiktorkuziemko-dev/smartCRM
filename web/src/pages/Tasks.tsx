@@ -5,30 +5,15 @@ import { seesAll, useMe, useTasks, useUsers } from '../lib/queries';
 import { TaskForm } from '../components/TaskForm';
 import { TaskItem } from '../components/TaskItem';
 import { Button, Empty } from '../components/ui';
+import { groupTasks } from '../lib/tasks';
 
-function groupTasks(tasks: Task[]) {
-  const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
-  const startTomorrow = new Date(startToday); startTomorrow.setDate(startTomorrow.getDate() + 1);
-  const startAfter = new Date(startTomorrow); startAfter.setDate(startAfter.getDate() + 1);
-  const groups = [
-    { title: 'Zaległe', tone: 'text-red-600', items: [] as Task[] },
-    { title: 'Dziś', tone: 'text-brand-600', items: [] as Task[] },
-    { title: 'Jutro', tone: 'text-slate-700', items: [] as Task[] },
-    { title: 'Później', tone: 'text-slate-700', items: [] as Task[] },
-  ];
-  for (const t of tasks) {
-    const d = new Date(t.dueAt);
-    const i = d < startToday ? 0 : d < startTomorrow ? 1 : d < startAfter ? 2 : 3;
-    groups[i].items.push(t);
-  }
-  return groups;
-}
 
 export function TasksPage() {
   const { data: me } = useMe();
   const { data: users = [] } = useUsers();
   const [assignee, setAssignee] = useState<string>('me');
   const [showDone, setShowDone] = useState(false);
+  const [showLater, setShowLater] = useState(false);
   const [form, setForm] = useState<{ task?: Task } | null>(null);
 
   const assigneeId = assignee === 'me' ? me?.id : assignee === 'all' ? undefined : Number(assignee);
@@ -51,13 +36,21 @@ export function TasksPage() {
       </div>
 
       <div className="space-y-5">
-        {groupTasks(open).filter((g) => g.items.length || g.title === 'Dziś').map((g) => (
-          <section key={g.title}>
-            <h2 className={`mb-2 text-sm font-semibold ${g.tone}`}>{g.title} <span className="font-normal text-slate-400">{g.items.length}</span></h2>
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              {g.items.length ? g.items.map((t) => <TaskItem key={t.id} task={t} showAssignee={showAssignee} onOpen={() => setForm({ task: t })} />)
-                : <Empty>Nic na dziś – dobra robota! 🎉</Empty>}
-            </div>
+        {groupTasks(open).filter((g) => g.key === 'today' || g.key === 'week' || g.items.length).map((g) => (
+          <section key={g.key}>
+            {g.key === 'later' ? (
+              <button onClick={() => setShowLater((v) => !v)} className="mb-2 text-sm font-semibold text-slate-500 hover:text-slate-700">
+                {showLater ? 'Ukryj' : 'Pokaż'} późniejsze <span className="font-normal text-slate-400">{g.items.length}</span>
+              </button>
+            ) : (
+              <h2 className={`mb-2 text-sm font-semibold ${g.tone}`}>{g.title} <span className="font-normal text-slate-400">{g.items.length}</span></h2>
+            )}
+            {(g.key !== 'later' || showLater) && (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                {g.items.length ? g.items.map((t) => <TaskItem key={t.id} task={t} showAssignee={showAssignee} onOpen={() => setForm({ task: t })} />)
+                  : <Empty>{g.key === 'today' ? 'Nic na dziś – dobra robota! 🎉' : 'Brak zadań w najbliższym tygodniu.'}</Empty>}
+              </div>
+            )}
           </section>
         ))}
 

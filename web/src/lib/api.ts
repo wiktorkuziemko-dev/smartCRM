@@ -41,14 +41,17 @@ export interface ClientDetail extends Client {
   contacts: Contact[];
   accessRules?: { userId: number; level: AccessLevel }[]; // tylko dla admina
 }
+export type TaskType = 'task' | 'call' | 'meeting' | 'email';
 export type ActivityType = 'comment' | 'call' | 'meeting' | 'email' | 'status_change' | 'system';
 export interface Attachment { id: number; fileName: string; mimeType: string; size: number }
 export interface Activity {
   id: number; clientId: number; authorId: number | null; authorName: string | null;
   type: ActivityType; content: string; createdAt: string; attachments: Attachment[];
+  /** Zadanie zaplanowane tym wpisem (telefon / spotkanie / e-mail). */
+  task: { id: number; dueAt: string; done: boolean; assigneeId: number; assigneeName: string | null } | null;
 }
 export interface Task {
-  id: number; title: string; notes: string | null; dueAt: string; done: boolean;
+  id: number; title: string; type: TaskType; notes: string | null; dueAt: string; done: boolean;
   clientId: number | null; clientName: string | null;
   assigneeId: number; assigneeName: string; googleEventId: string | null;
   canEdit: boolean;

@@ -1,19 +1,22 @@
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, Clock } from 'lucide-react';
+import { Check, Clock, Mail, Phone, Users } from 'lucide-react';
 import { api, type Task } from '../lib/api';
 import { fmtDue, isOverdue } from '../lib/format';
 import { Avatar } from './ui';
+
+const TYPE_ICONS = { task: null, call: Phone, meeting: Users, email: Mail };
 
 export function TaskItem({ task, onOpen, showClient = true, showAssignee = false }: {
   task: Task; onOpen: () => void; showClient?: boolean; showAssignee?: boolean;
 }) {
   const qc = useQueryClient();
   const overdue = !task.done && isOverdue(task.dueAt);
+  const TypeIcon = TYPE_ICONS[task.type];
 
   async function toggle() {
     await api.put(`/api/tasks/${task.id}`, { done: !task.done });
-    await Promise.all([qc.invalidateQueries({ queryKey: ['tasks'] }), qc.invalidateQueries({ queryKey: ['clients'] })]);
+    await Promise.all(['tasks', 'clients', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
   }
 
   return (
@@ -23,7 +26,9 @@ export function TaskItem({ task, onOpen, showClient = true, showAssignee = false
         <Check size={12} strokeWidth={3} />
       </button>
       <button onClick={task.canEdit ? onOpen : undefined} className={`min-w-0 flex-1 text-left ${task.canEdit ? '' : 'cursor-default'}`}>
-        <div className={`truncate text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{task.title}</div>
+        <div className={`flex items-center gap-1.5 truncate text-sm ${task.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+          {TypeIcon && <TypeIcon size={13} className="shrink-0 text-brand-600" />}{task.title}
+        </div>
         {showClient && task.clientName && (
           <Link to={`/clients/${task.clientId}`} onClick={(e) => e.stopPropagation()} className="text-xs text-brand-600 hover:underline">{task.clientName}</Link>
         )}

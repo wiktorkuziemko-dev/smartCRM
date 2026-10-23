@@ -8,6 +8,7 @@ import { useMe, useStatuses, useTasks } from '../lib/queries';
 import { TaskForm } from '../components/TaskForm';
 import { TaskItem } from '../components/TaskItem';
 import { Empty } from '../components/ui';
+import { groupTasks } from '../lib/tasks';
 
 export function DashboardPage() {
   const { data: me } = useMe();
@@ -70,10 +71,16 @@ export function DashboardPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h2 className="font-semibold">Na dziś</h2>
+            <h2 className="font-semibold">Moje zadania</h2>
             <Link to="/tasks" className="text-sm text-brand-600 hover:underline">Wszystkie zadania</Link>
           </div>
-          {today.length ? today.map((t) => <TaskItem key={t.id} task={t} onOpen={() => setForm({ task: t })} />) : <Empty>Brak zadań na dziś.</Empty>}
+          {groupTasks(tasks).filter((g) => g.key !== 'later' && (g.key !== 'overdue' || g.items.length)).map((g) => (
+            <div key={g.key}>
+              <div className={`border-t border-slate-100 bg-slate-50/60 px-4 py-1.5 text-xs font-semibold ${g.tone}`}>{g.title} · {g.items.length}</div>
+              {g.items.length ? g.items.map((t) => <TaskItem key={t.id} task={t} onOpen={() => setForm({ task: t })} />)
+                : <p className="px-4 py-3 text-sm text-slate-400">{g.key === 'today' ? 'Brak zadań na dziś.' : 'Brak zadań w najbliższym tygodniu.'}</p>}
+            </div>
+          ))}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">

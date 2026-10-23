@@ -126,9 +126,10 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
 
         {me?.role === 'ADMIN' && <VisibilitySection client={client} />}
 
-        <Section title={`Zadania (${tasks.length})`} action={canEdit && <button onClick={() => setTaskForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
+        {/* Zadania planuje się z historii kontaktów (telefon / spotkanie / e-mail) – tu tylko podgląd i odhaczanie. */}
+        <Section title={`Zaplanowane (${tasks.length})`}>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {tasks.length === 0 ? <Empty>Brak otwartych zadań</Empty> : tasks.map((t) => (
+            {tasks.length === 0 ? <Empty>Brak zaplanowanych kontaktów – dodaj telefon, spotkanie lub e-mail w historii poniżej.</Empty> : tasks.map((t) => (
               <TaskItem key={t.id} task={t} showClient={false} showAssignee={seesAll(me)} onOpen={() => setTaskForm({ task: t })} />
             ))}
           </div>
@@ -140,7 +141,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
       </div>
 
       {editing && <ClientForm client={client} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />}
-      {taskForm && <TaskForm task={taskForm.task} clientId={clientId} onClose={() => setTaskForm(null)} />}
+      {taskForm?.task && <TaskForm task={taskForm.task} clientId={clientId} onClose={() => setTaskForm(null)} />}
       {contactForm && <ContactForm clientId={clientId} contact={contactForm.contact} onClose={() => setContactForm(null)} />}
     </div>
   );

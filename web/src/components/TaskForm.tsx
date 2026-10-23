@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CalendarPlus, Trash2 } from 'lucide-react';
-import { api, type Task } from '../lib/api';
+import { api, type Task, type TaskType } from '../lib/api';
 import { googleCalendarLink, toLocalInput } from '../lib/format';
 import { seesAll, useClients, useMe, useUsers } from '../lib/queries';
 import { Button, ErrorText, Field, Modal } from './ui';
@@ -22,6 +22,7 @@ export function TaskForm({ task, clientId, onClose }: Props) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
     title: task?.title ?? '',
+    type: task?.type ?? ('task' as TaskType),
     notes: task?.notes ?? '',
     dueAt: toLocalInput(task ? new Date(task.dueAt) : defaultDue()),
     clientId: (task?.clientId ?? clientId)?.toString() ?? '',
@@ -34,6 +35,7 @@ export function TaskForm({ task, clientId, onClose }: Props) {
   const refresh = () => Promise.all([
     qc.invalidateQueries({ queryKey: ['tasks'] }),
     qc.invalidateQueries({ queryKey: ['clients'] }),
+    qc.invalidateQueries({ queryKey: ['activities'] }),
   ]);
 
   async function submit(e: FormEvent) {
@@ -42,6 +44,7 @@ export function TaskForm({ task, clientId, onClose }: Props) {
     setError(null);
     const payload = {
       title: form.title,
+      type: form.type,
       notes: form.notes,
       dueAt: new Date(form.dueAt).toISOString(),
       clientId: form.clientId ? Number(form.clientId) : null,
@@ -74,6 +77,14 @@ export function TaskForm({ task, clientId, onClose }: Props) {
     <Modal title={task ? 'Edytuj zadanie' : 'Nowe zadanie'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         <Field label="Tytuł *"><input className="input" value={form.title} onChange={set('title')} autoFocus placeholder="np. Zadzwonić w sprawie oferty" /></Field>
+        <Field label="Rodzaj">
+          <select className="input" value={form.type} onChange={set('type')}>
+            <option value="task">Zadanie</option>
+            <option value="call">Telefon</option>
+            <option value="meeting">Spotkanie</option>
+            <option value="email">E-mail</option>
+          </select>
+        </Field>
         <Field label="Termin *"><input className="input" type="datetime-local" value={form.dueAt} onChange={set('dueAt')} /></Field>
         <Field label="Klient">
           <select className="input" value={form.clientId} onChange={set('clientId')} disabled={Boolean(clientId)}>
