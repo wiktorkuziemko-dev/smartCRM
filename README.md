@@ -13,7 +13,7 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zadania i historia kontaktów.
 - **Historia kontaktów**: komentarze, telefony, spotkania, e-maile oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
-- **Tagi**: listą zarządza administrator (na start: `przetarg`, `prywatne`, `publiczne`), a handlowcy przypisują tagi swoim klientom. Na liście klientów można filtrować po tagu.
+- **Tagi**: listą zarządza administrator (na start: `przetarg`), a handlowcy przypisują tagi klientom, które mogą edytować. Na liście klientów można filtrować po tagu.
 - **Dostęp handlowców do klientów** (brak / podgląd / edycja), ustawiany przez administratora:
   - **na karcie klienta**, w sekcji „Dostęp handlowców”, osobno dla każdego handlowca,
   - **przez tag**, w *Administracja → Tagi*: dostęp do wszystkich klientów z danym tagiem.

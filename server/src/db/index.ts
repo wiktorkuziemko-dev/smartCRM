@@ -26,8 +26,6 @@ const DEFAULT_STATUSES = [
 
 const DEFAULT_TAGS = [
   { name: 'przetarg', color: '#f59e0b' },
-  { name: 'prywatne', color: '#0ea5e9' },
-  { name: 'publiczne', color: '#8b5cf6' },
 ];
 
 /** Migracje + dane startowe (admin i domyślne statusy przy pierwszym uruchomieniu). */
