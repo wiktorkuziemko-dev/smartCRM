@@ -1,3 +1,6 @@
+# Stała nazwa projektu – dane (wolumeny) nie zależą od nazwy folderu, do którego rozpakowano aplikację.
+name: smartcrm
+
 services:
   db:
     image: postgres:16-alpine
