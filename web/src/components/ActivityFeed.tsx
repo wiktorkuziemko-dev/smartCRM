@@ -42,7 +42,7 @@ const TYPE_META: Record<ActivityType, { label: string; icon: typeof Phone; tone:
   system: { label: 'system', icon: Info, tone: 'bg-slate-100 text-slate-500' },
 };
 
-export function ActivityFeed({ clientId, readOnly }: { clientId: number; readOnly?: boolean }) {
+export function ActivityFeed({ clientId, ownerId, readOnly }: { clientId: number; ownerId: number | null; readOnly?: boolean }) {
   const { data: activities = [] } = useQuery({
     queryKey: ['activities', clientId],
     queryFn: () => api.get<Activity[]>(`/api/clients/${clientId}/activities`),
@@ -55,7 +55,7 @@ export function ActivityFeed({ clientId, readOnly }: { clientId: number; readOnl
       <div className="space-y-4">
         {ordered.map((a) => <ActivityItem key={a.id} activity={a} readOnly={readOnly} />)}
       </div>
-      {!readOnly && <Composer clientId={clientId} />}
+      {!readOnly && <Composer clientId={clientId} ownerId={ownerId} />}
     </div>
   );
 }
@@ -117,7 +117,7 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
             </button>
             <CalendarClock size={12} />
             <span className="font-medium">{a.task.done ? 'Wykonane' : 'Termin'}: {fmtDue(a.task.dueAt)}</span>
-            {a.task.assigneeName && a.task.assigneeId !== a.authorId && <span>· {a.task.assigneeName}</span>}
+            {a.task.assigneeName && <span>· {a.task.assigneeName}</span>}
           </div>
         )}
         {images.length > 0 && (
@@ -146,7 +146,7 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
   );
 }
 
-function Composer({ clientId }: { clientId: number }) {
+function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | null }) {
   const { data: me } = useMe();
   const { data: users = [] } = useUsers();
   const qc = useQueryClient();
@@ -154,6 +154,9 @@ function Composer({ clientId }: { clientId: number }) {
   const [content, setContent] = useState('');
   const [dueAt, setDueAt] = useState(nextHour);
   const [assigneeId, setAssigneeId] = useState('');
+  // Kierownik/admin planuje domyślnie dla opiekuna klienta (handlowca), a nie dla siebie.
+  const owner = users.find((u) => u.id === ownerId && u.active);
+  const selectedAssignee = assigneeId || String(owner?.id ?? me?.id ?? '');
   const planned = PLANNED.has(type);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -172,7 +175,7 @@ function Composer({ clientId }: { clientId: number }) {
     fd.append('content', content);
     if (planned) {
       fd.append('dueAt', new Date(dueAt).toISOString());
-      if (assigneeId) fd.append('assigneeId', assigneeId);
+      if (seesAll(me) && selectedAssignee) fd.append('assigneeId', selectedAssignee);
     }
     files.forEach((f) => fd.append('files', f));
     try {
@@ -226,7 +229,7 @@ function Composer({ clientId }: { clientId: number }) {
               {seesAll(me) && (
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                   Kto:
-                  <select value={assigneeId || String(me?.id ?? '')} onChange={(e) => setAssigneeId(e.target.value)} className="input w-auto px-2 py-1 text-xs">
+                  <select value={selectedAssignee} onChange={(e) => setAssigneeId(e.target.value)} className="input w-auto px-2 py-1 text-xs">
                     {users.filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
                   </select>
                 </label>

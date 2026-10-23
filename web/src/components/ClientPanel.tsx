@@ -136,7 +136,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
         </Section>
 
         <Section title="Historia kontaktów">
-          <ActivityFeed clientId={clientId} readOnly={!canEdit} />
+          <ActivityFeed clientId={clientId} ownerId={client.ownerId} readOnly={!canEdit} />
         </Section>
       </div>
 
