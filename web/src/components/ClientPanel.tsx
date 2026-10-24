@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Briefcase, Eye, Lock, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
-import { api, type AccessLevel, type ClientDetail, type Contact, type Task } from '../lib/api';
+import { Archive, ArchiveRestore, ArrowRight, Briefcase, Eye, Lock, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
+import { api, type AccessLevel, type ClientDetail, type Contact, type Status, type Task } from '../lib/api';
 import { fmtDateTime, fmtNip, fmtNumber } from '../lib/format';
 import { purgeClient, restoreClient } from '../lib/archive';
 import { seesAll, useFields, useMe, useStatuses, useTags, useTasks, useUsers } from '../lib/queries';
@@ -10,7 +10,7 @@ import { ClientForm } from './ClientForm';
 import { formatCustomValue } from './CustomFieldInput';
 import { TaskForm } from './TaskForm';
 import { TaskItem } from './TaskItem';
-import { Avatar, Button, Empty, ErrorText, Field, Modal, TagPicker } from './ui';
+import { Avatar, Button, Empty, ErrorText, Field, Modal, StatusBadge, TagPicker } from './ui';
 
 export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: () => void }) {
   const { data: me } = useMe();
@@ -296,35 +296,99 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Lejek: stopnie statusu zdefiniowane przez admina; kliknięcie zmienia status. */
+/** "1 etap", "2 etapy", "5 etapów" – polska odmiana. */
+function stepsLabel(n: number) {
+  const word = n === 1 ? 'etap' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'etapy' : 'etapów';
+  return `${n} ${word}`;
+}
+
+/** Lejek: stopnie statusu zdefiniowane przez admina; kliknięcie zmienia status (po potwierdzeniu). */
 function StatusStepper({ client, canEdit }: { client: ClientDetail; canEdit: boolean }) {
   const { data: statuses = [] } = useStatuses();
   const qc = useQueryClient();
+  const [pending, setPending] = useState<Status | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const visible = statuses.filter((s) => s.active || s.id === client.statusId);
   const currentIndex = visible.findIndex((s) => s.id === client.statusId);
+  const current = visible[currentIndex];
+  const pendingIndex = pending ? visible.indexOf(pending) : -1;
 
-  async function change(statusId: number) {
-    if (!canEdit || statusId === client.statusId) return;
-    await api.put(`/api/clients/${client.id}`, { statusId });
-    await Promise.all(['client', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k, client.id] })));
-    qc.invalidateQueries({ queryKey: ['clients'] });
+  function ask(s: Status) {
+    if (!canEdit || s.id === client.statusId) return;
+    setError(null);
+    setPending(s);
+  }
+
+  async function confirm() {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await api.put(`/api/clients/${client.id}`, { statusId: pending.id });
+      await Promise.all(['client', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k, client.id] })));
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      setPending(null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status w lejku</h3>
-        <span className="text-sm font-medium" style={{ color: visible[currentIndex]?.color }}>{visible[currentIndex]?.name ?? 'Brak statusu'}</span>
+        <span className="text-sm font-medium" style={{ color: current?.color }}>
+          {current ? `${currentIndex + 1}/${visible.length} · ${current.name}` : 'Brak statusu'}
+        </span>
       </div>
       <div className="flex gap-1">
-        {visible.map((s, i) => (
-          <button key={s.id} onClick={() => change(s.id)} title={s.name}
-            className={`group relative h-2.5 flex-1 rounded-full transition ${canEdit ? 'hover:scale-y-150' : 'cursor-default'}`}
-            style={{ backgroundColor: i <= currentIndex ? visible[currentIndex].color : '#e2e8f0' }}>
-            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white group-hover:block">{s.name}</span>
-          </button>
-        ))}
+        {visible.map((s, i) => {
+          const isCurrent = s.id === client.statusId;
+          // Dymek przy skrajnych segmentach wyrównany do krawędzi, żeby nie wychodził poza panel.
+          const tipPos = i === 0 ? 'left-0' : i === visible.length - 1 ? 'right-0' : 'left-1/2 -translate-x-1/2';
+          return (
+            <button key={s.id} type="button" onClick={() => ask(s)} aria-label={`${i + 1}. ${s.name}`}
+              className={`group relative flex h-5 flex-1 items-center ${canEdit && !isCurrent ? 'cursor-pointer' : 'cursor-default'}`}>
+              <span className={`block w-full rounded-full transition-all duration-150 ${canEdit && !isCurrent ? 'h-2.5 group-hover:h-4' : 'h-2.5'}`}
+                style={{ backgroundColor: i <= currentIndex ? current.color : '#e2e8f0' }} />
+              <span className={`pointer-events-none absolute top-full z-20 mt-1.5 hidden whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-left text-xs leading-tight text-white shadow-lg group-hover:block ${tipPos}`}>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {i + 1}. {s.name}
+                </span>
+                <span className="mt-0.5 block text-[11px] text-slate-300">
+                  {isCurrent ? 'Obecny status' : canEdit ? 'Kliknij, aby zmienić' : `Etap ${i + 1} z ${visible.length}`}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
+
+      {pending && (
+        <Modal title="Zmiana statusu klienta" onClose={() => !busy && setPending(null)}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">Czy na pewno zmienić status klienta <b>{client.name}</b>?</p>
+            <div className="flex flex-wrap items-center justify-center gap-3 rounded-xl bg-slate-50 px-4 py-4">
+              {current ? <StatusBadge name={current.name} color={current.color} /> : <span className="text-sm text-slate-400">brak statusu</span>}
+              <ArrowRight size={18} className="text-slate-400" />
+              <StatusBadge name={pending.name} color={pending.color} />
+            </div>
+            {currentIndex >= 0 && pendingIndex < currentIndex && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">Uwaga: to cofnięcie klienta w lejku o {stepsLabel(currentIndex - pendingIndex)}.</p>
+            )}
+            <p className="text-xs text-slate-500">Zmiana zostanie zapisana w historii kontaktów klienta.</p>
+            <ErrorText error={error} />
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setPending(null)} disabled={busy}>Anuluj</Button>
+              <Button onClick={confirm} disabled={busy} autoFocus>{busy ? 'Zapisywanie…' : 'Zmień status'}</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
