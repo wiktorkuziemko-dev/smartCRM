@@ -1,4 +1,4 @@
-import { and, eq, exists, inArray, not, or, sql, type SQL } from 'drizzle-orm';
+import { and, eq, exists, inArray, isNull, not, or, sql, type SQL } from 'drizzle-orm';
 import type { FastifyReply } from 'fastify';
 import { db, schema } from '../db/index.js';
 import { seesAllClients, type SessionUser } from './auth.js';
@@ -37,10 +37,11 @@ function accessCondition(user: SessionUser, levels: AccessLevel[]): SQL {
   )!;
 }
 
-/** Warunek SQL: klienci, których użytkownik może oglądać. */
-export function clientVisibleTo(user: SessionUser): SQL | undefined {
-  if (seesAllClients(user)) return undefined;
-  return accessCondition(user, ['view', 'edit']);
+/** Warunek SQL: klienci, których użytkownik może oglądać (zarchiwizowani są ukryci dla wszystkich). */
+export function clientVisibleTo(user: SessionUser): SQL {
+  const active = isNull(schema.clients.archivedAt);
+  if (seesAllClients(user)) return active;
+  return and(active, accessCondition(user, ['view', 'edit']))!;
 }
 
 /** Wyrażenie SQL (boolean): czy użytkownik może edytować klienta z bieżącego wiersza. */
@@ -56,11 +57,17 @@ export function clientEditableBy(user: SessionUser): SQL<boolean> {
 export async function loadClientFor(user: SessionUser, clientId: number, reply: FastifyReply, need: 'view' | 'edit' = 'view') {
   const [row] = await db.select({
     client: schema.clients,
-    visible: clientVisibleTo(user) ? sql<boolean>`(${clientVisibleTo(user)})` : sql<boolean>`true`,
+    visible: sql<boolean>`(${clientVisibleTo(user)})`,
     canEdit: clientEditableBy(user),
   }).from(schema.clients).where(eq(schema.clients.id, clientId));
   if (!row) {
     reply.code(404).send({ error: 'Nie znaleziono klienta' });
+    return null;
+  }
+  // Zarchiwizowanego klienta może tylko podejrzeć admin (w archiwum); nikt go nie edytuje.
+  if (row.client.archivedAt) {
+    if (user.role === 'ADMIN' && need === 'view') return { ...row.client, canEdit: false };
+    reply.code(404).send({ error: 'Klient został zarchiwizowany' });
     return null;
   }
   if (!row.visible) {

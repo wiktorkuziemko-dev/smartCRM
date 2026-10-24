@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Eye, Lock, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Briefcase, Eye, Lock, Mail, Pencil, Phone, Plus, Star, Tag as TagIcon, Trash2, X } from 'lucide-react';
 import { api, type AccessLevel, type ClientDetail, type Contact, type Task } from '../lib/api';
 import { fmtDateTime, fmtNip, fmtNumber } from '../lib/format';
+import { purgeClient, restoreClient } from '../lib/archive';
 import { seesAll, useFields, useMe, useStatuses, useTags, useTasks, useUsers } from '../lib/queries';
 import { ActivityFeed } from './ActivityFeed';
 import { ClientForm } from './ClientForm';
@@ -31,10 +32,21 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
   const primary = client.contacts.find((c) => c.isPrimary) ?? client.contacts[0];
   const others = client.contacts.filter((c) => c !== primary);
 
-  async function remove() {
-    if (!confirm(`Usunąć klienta "${client!.name}" wraz z całą historią? Tej operacji nie można cofnąć.`)) return;
+  const archived = Boolean(client.archivedAt);
+  const refreshAll = () => Promise.all(['clients', 'client', 'archive', 'tasks', 'dashboard', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+
+  async function archive() {
+    if (!confirm(`Przenieść klienta „${client!.name}” do archiwum?\n\nKlient zniknie z listy i zadań wszystkich użytkowników. Administrator może go przywrócić w zakładce Administracja → Archiwum.`)) return;
     await api.del(`/api/clients/${clientId}`);
-    await qc.invalidateQueries({ queryKey: ['clients'] });
+    await refreshAll();
+    onClose();
+  }
+  async function restore() {
+    if (await restoreClient(clientId, client!.name)) await refreshAll();
+  }
+  async function purge() {
+    if (!(await purgeClient(clientId, client!.name))) return;
+    await refreshAll();
     onClose();
   }
 
@@ -51,7 +63,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
             <HeaderTags client={client} canEdit={canEdit} />
           </div>
           {canEdit && <button onClick={() => setEditing(true)} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Edytuj"><Pencil size={17} /></button>}
-          {me?.role === 'ADMIN' && <button onClick={remove} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Usuń klienta"><Trash2 size={17} /></button>}
+          {me?.role === 'ADMIN' && !archived && <button onClick={archive} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Przenieś do archiwum"><Archive size={17} /></button>}
           <button onClick={onClose} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Zamknij"><X size={18} /></button>
         </div>
 
@@ -78,7 +90,13 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
         </div>
       </div>
 
-      {!canEdit && (
+      {archived ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-slate-100 px-5 py-2.5 text-sm text-slate-700">
+          <Archive size={15} /> <span className="flex-1">Klient w archiwum od {fmtDateTime(client.archivedAt!)}.</span>
+          <Button variant="secondary" className="px-2.5 py-1" onClick={restore}><ArchiveRestore size={14} /> Przywróć</Button>
+          <Button variant="danger" className="px-2.5 py-1" onClick={purge}><Trash2 size={14} /> Usuń trwale</Button>
+        </div>
+      ) : !canEdit && (
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-sm text-amber-800">
           <Lock size={15} /> Tylko podgląd – nie możesz edytować tego klienta.
         </div>
@@ -124,12 +142,12 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           )}
         </Section>
 
-        {me?.role === 'ADMIN' && <VisibilitySection client={client} />}
+        {me?.role === 'ADMIN' && !archived && <VisibilitySection client={client} />}
 
         {/* Zadania planuje się z historii kontaktów (telefon / spotkanie / e-mail) – tu tylko podgląd i odhaczanie. */}
         <Section title={`Zaplanowane (${tasks.length})`}>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {tasks.length === 0 ? <Empty>Brak zaplanowanych kontaktów – dodaj telefon, spotkanie lub e-mail w historii poniżej.</Empty> : tasks.map((t) => (
+            {tasks.length === 0 ? <Empty>{canEdit ? 'Brak zaplanowanych kontaktów – dodaj telefon, spotkanie lub e-mail w historii poniżej.' : 'Brak zaplanowanych kontaktów.'}</Empty> : tasks.map((t) => (
               <TaskItem key={t.id} task={t} showClient={false} showAssignee={seesAll(me)} onOpen={() => setTaskForm({ task: t })} />
             ))}
           </div>

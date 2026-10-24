@@ -31,6 +31,7 @@ export interface Client {
   custom: Record<string, unknown>; createdAt: string; updatedAt: string;
   tagIds: number[];
   canEdit: boolean; // false = tylko podgląd
+  archivedAt: string | null;
 }
 export interface ClientRow extends Client {
   contactName: string | null; contactPosition: string | null;
@@ -59,6 +60,11 @@ export interface Task {
 export interface Dashboard {
   byStatus: { statusId: number | null; count: number; potential: number }[];
   recent: { id: number; type: ActivityType; content: string; createdAt: string; clientId: number; clientName: string; authorName: string | null }[];
+}
+
+export interface ArchivedClient {
+  id: number; name: string; nip: string | null; ownerName: string | null;
+  archivedAt: string; archivedByName: string | null;
 }
 
 export class ApiError extends Error {

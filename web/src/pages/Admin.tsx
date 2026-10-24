@@ -1,12 +1,16 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { purgeClient, restoreClient } from '../lib/archive';
+import { fmtDateTime, fmtNip } from '../lib/format';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react';
-import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type AccessLevel } from '../lib/api';
+import { ArchiveRestore, ArrowDown, ArrowUp, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type AccessLevel, type ArchivedClient } from '../lib/api';
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
@@ -28,6 +32,7 @@ export function AdminPage() {
       {tab === 'Statusy klienta' && <StatusesTab />}
       {tab === 'Tagi' && <TagsTab />}
       {tab === 'Pola klienta' && <FieldsTab />}
+      {tab === 'Archiwum' && <ArchiveTab />}
     </div>
   );
 }
@@ -394,5 +399,55 @@ function FieldForm({ field, onClose }: { field?: CustomField; onClose: () => voi
         <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Anuluj</Button><Button onClick={save} disabled={!form.label.trim()}>Zapisz</Button></div>
       </div>
     </Modal>
+  );
+}
+
+// ---------------- Archiwum ----------------
+function ArchiveTab() {
+  const qc = useQueryClient();
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ['archive'],
+    queryFn: () => api.get<ArchivedClient[]>('/api/clients-archive'),
+  });
+  const refresh = () => Promise.all(['archive', 'clients', 'tasks', 'dashboard'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+
+  return (
+    <>
+      <p className="mb-3 text-sm text-slate-500">
+        Zarchiwizowani klienci są niewidoczni w aplikacji (lista, zadania, pulpit). Możesz ich przywrócić albo usunąć trwale.
+        Trwałe usunięcie kasuje wszystkie dane klienta: osoby kontaktowe, historię, załączniki, zadania, tagi i ustawienia dostępu.
+      </p>
+      <Card>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr><th className="px-4 py-2.5">Klient</th><th className="px-4">Opiekun</th><th className="px-4">Zarchiwizowano</th><th /></tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <tr key={c.id} className="border-t border-slate-100">
+                <td className="px-4 py-2.5">
+                  <div className="font-medium">{c.name}</div>
+                  {c.nip && <div className="text-xs text-slate-400">NIP {fmtNip(c.nip)}</div>}
+                </td>
+                <td className="px-4 text-slate-600">{c.ownerName ?? '—'}</td>
+                <td className="px-4 text-slate-600">{fmtDateTime(c.archivedAt)}<div className="text-xs text-slate-400">{c.archivedByName}</div></td>
+                <td className="px-4">
+                  <div className="flex justify-end gap-1.5">
+                    <Link to={`/clients/${c.id}`}><Button variant="ghost" className="px-2 py-1"><Eye size={14} /> Podgląd</Button></Link>
+                    <Button variant="secondary" className="px-2 py-1" onClick={async () => { if (await restoreClient(c.id, c.name)) await refresh(); }}>
+                      <ArchiveRestore size={14} /> Przywróć
+                    </Button>
+                    <Button variant="danger" className="px-2 py-1" onClick={async () => { if (await purgeClient(c.id, c.name)) await refresh(); }}>
+                      <Trash2 size={14} /> Usuń trwale
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!isLoading && rows.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Archiwum jest puste.</p>}
+      </Card>
+    </>
   );
 }

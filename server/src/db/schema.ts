@@ -66,6 +66,9 @@ export const clients = pgTable('clients', {
   custom: jsonb('custom').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  // Archiwum: klient ukryty w aplikacji, admin może go przywrócić albo usunąć trwale.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: integer('archived_by_id').references(() => users.id, { onDelete: 'set null' }),
 }, (t) => [index('clients_owner_idx').on(t.ownerId)]);
 
 export const contacts = pgTable('contacts', {

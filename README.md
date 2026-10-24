@@ -8,7 +8,7 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 - **Logowanie i role**: Administrator, Kierownik, Handlowiec
   - *Handlowiec* ma pełny dostęp do swoich klientów (jest ich opiekunem). Do pozostałych klientów dostęp nadaje mu administrator: **brak**, **tylko podgląd** albo **pełna edycja**.
   - *Kierownik* widzi i edytuje wszystkich klientów i zadania, zmienia opiekunów i przypisuje zadania.
-  - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami, tagami, polami klienta i dostępem handlowców. **Tylko administrator może usuwać klientów.**
+  - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami, tagami, polami klienta i dostępem handlowców. **Tylko administrator może usuwać (archiwizować) klientów.**
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zaplanowane kontakty i historia kontaktów.
 - **Historia kontaktów**: komentarze oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
@@ -21,6 +21,7 @@ Działa w Dockerze na serwerze w sieci lokalnej.
   - **przez tag**, w *Administracja → Tagi*: dostęp do wszystkich klientów z danym tagiem.
 
   Zasady: opiekun ma zawsze pełną edycję. Ustawienie na karcie klienta ma pierwszeństwo przed tagami, także jawne „Brak”. Bez ustawienia na karcie liczy się najwyższy poziom spośród tagów klienta. Przy podglądzie handlowiec widzi dane, historię i zadania, ale nie może niczego zmieniać. Wyjątek: zadania przypisane do niego samego może edytować i odhaczać.
+- **Archiwum klientów**: usunięcie klienta przenosi go do archiwum. Klient znika z listy, zadań i pulpitu wszystkich użytkowników, a jego zadania z Kalendarza Google. W *Administracja → Archiwum* administrator może go podejrzeć, **przywrócić** albo **usunąć trwale**. Trwałe usunięcie kasuje wszystkie dane klienta: osoby kontaktowe, historię, pliki załączników, zadania, tagi i ustawienia dostępu.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
 - **Zadania i przypomnienia**: widok „Moje zadania” i pulpit (zaległe / dziś / najbliższe 7 dni, późniejsze zwinięte), przypomnienie w aplikacji 15 minut przed terminem.
 - **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć pełną automatyczną synchronizację (opis niżej).

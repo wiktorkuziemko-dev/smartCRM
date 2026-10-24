@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
-import { and, asc, eq, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
@@ -25,8 +25,10 @@ const assignee = alias(schema.users, 'assignee');
 
 /** Handlowiec widzi zadania przypisane do siebie oraz zadania przy widocznych dla siebie klientach. */
 function visibility(user: SessionUser): SQL | undefined {
-  if (seesAllClients(user)) return undefined;
-  return or(eq(schema.tasks.assigneeId, user.id), clientVisibleTo(user));
+  // Zadania zarchiwizowanych klientów są ukryte (zadania bez klienta – widoczne).
+  const notArchived = isNull(schema.clients.archivedAt);
+  if (seesAllClients(user)) return notArchived;
+  return and(notArchived, or(eq(schema.tasks.assigneeId, user.id), clientVisibleTo(user)));
 }
 
 /** Zmieniać zadanie może osoba przypisana albo ktoś z prawem edycji klienta. */

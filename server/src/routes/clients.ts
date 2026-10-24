@@ -1,10 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole, seesAllClients, type SessionUser } from '../lib/auth.js';
 import { clientEditableBy, clientVisibleTo, loadClientFor, touchClient } from '../lib/access.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
+import { syncTaskToGoogle } from '../lib/google.js';
+import { config } from '../config.js';
 
 export const VOIVODESHIPS = [
   'dolnośląskie', 'kujawsko-pomorskie', 'lubelskie', 'lubuskie', 'łódzkie', 'małopolskie',
@@ -57,10 +62,14 @@ async function sanitizeCustom(input: Record<string, unknown>, previous: Record<s
 
 async function checkDuplicateNip(nip: string | null, exceptId: number | null, reply: FastifyReply) {
   if (!nip) return true;
-  const [dup] = await db.select({ name: schema.clients.name, owner: schema.users.fullName })
+  const [dup] = await db.select({ name: schema.clients.name, owner: schema.users.fullName, archivedAt: schema.clients.archivedAt })
     .from(schema.clients)
     .leftJoin(schema.users, eq(schema.users.id, schema.clients.ownerId))
     .where(and(eq(schema.clients.nip, nip), exceptId ? ne(schema.clients.id, exceptId) : undefined));
+  if (dup?.archivedAt) {
+    reply.code(409).send({ error: `Klient z tym NIP jest w archiwum („${dup.name}”) – administrator może go przywrócić.` });
+    return false;
+  }
   if (dup) {
     reply.code(409).send({ error: `Klient z tym NIP już istnieje: ${dup.name} (opiekun: ${dup.owner ?? 'brak'})` });
     return false;
@@ -259,11 +268,83 @@ export async function clientRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // --- Archiwum (tylko admin) ---
+
+  /** Usunięcie klienta = archiwizacja: znika z aplikacji, ale admin może go przywrócić. */
   app.delete('/api/clients/:id', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
     const params = parse(idParam, req.params, reply);
     if (!params) return;
-    await db.delete(schema.clients).where(eq(schema.clients.id, params.id));
+    const client = await loadClientFor(req.user, params.id, reply);
+    if (!client) return;
+    if (client.archivedAt) return reply.code(400).send({ error: 'Klient jest już w archiwum' });
+    await db.update(schema.clients).set({ archivedAt: new Date(), archivedById: req.user.id })
+      .where(eq(schema.clients.id, client.id));
+    await logActivity(client.id, req.user.id, 'system', 'Przeniesiono klienta do archiwum');
+    // Otwarte zadania znikają z Kalendarza Google (wrócą po przywróceniu klienta).
+    const open = await db.select({ id: schema.tasks.id }).from(schema.tasks)
+      .where(and(eq(schema.tasks.clientId, client.id), eq(schema.tasks.done, false), isNotNull(schema.tasks.googleEventId)));
+    for (const t of open) {
+      await syncTaskToGoogle(t.id, { deleted: true });
+      await db.update(schema.tasks).set({ googleEventId: null }).where(eq(schema.tasks.id, t.id));
+    }
     return { ok: true };
+  });
+
+  const archivedBy = alias(schema.users, 'archived_by');
+  app.get('/api/clients-archive', { preHandler: requireRole('ADMIN') }, async () => {
+    return db.select({
+      id: schema.clients.id,
+      name: schema.clients.name,
+      nip: schema.clients.nip,
+      ownerName: schema.users.fullName,
+      archivedAt: schema.clients.archivedAt,
+      archivedByName: archivedBy.fullName,
+    })
+      .from(schema.clients)
+      .leftJoin(schema.users, eq(schema.users.id, schema.clients.ownerId))
+      .leftJoin(archivedBy, eq(archivedBy.id, schema.clients.archivedById))
+      .where(isNotNull(schema.clients.archivedAt))
+      .orderBy(desc(schema.clients.archivedAt));
+  });
+
+  async function loadArchived(id: number, reply: FastifyReply) {
+    const [client] = await db.select().from(schema.clients).where(eq(schema.clients.id, id));
+    if (!client) { reply.code(404).send({ error: 'Nie znaleziono klienta' }); return null; }
+    if (!client.archivedAt) { reply.code(400).send({ error: 'Klient nie jest w archiwum' }); return null; }
+    return client;
+  }
+
+  app.post('/api/clients/:id/restore', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    const client = await loadArchived(params.id, reply);
+    if (!client) return;
+    await db.update(schema.clients).set({ archivedAt: null, archivedById: null, updatedAt: new Date() })
+      .where(eq(schema.clients.id, client.id));
+    await logActivity(client.id, req.user.id, 'system', 'Przywrócono klienta z archiwum');
+    const open = await db.select({ id: schema.tasks.id }).from(schema.tasks)
+      .where(and(eq(schema.tasks.clientId, client.id), eq(schema.tasks.done, false)));
+    void (async () => { for (const t of open) await syncTaskToGoogle(t.id); })();
+    return { ok: true };
+  });
+
+  /**
+   * Trwałe usunięcie klienta z archiwum: dane, osoby kontaktowe, historia, zadania, tagi,
+   * ustawienia dostępu (kaskadowo w bazie) oraz pliki załączników z dysku.
+   */
+  app.delete('/api/clients/:id/permanent', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    const client = await loadArchived(params.id, reply);
+    if (!client) return;
+    const files = await db.select({ storedName: schema.attachments.storedName })
+      .from(schema.attachments)
+      .innerJoin(schema.activities, eq(schema.activities.id, schema.attachments.activityId))
+      .where(eq(schema.activities.clientId, client.id));
+    await db.delete(schema.clients).where(eq(schema.clients.id, client.id));
+    files.forEach((f) => fs.rmSync(path.join(config.uploadDir, f.storedName), { force: true }));
+    req.log.info({ clientId: client.id, files: files.length, by: req.user.id }, 'Trwale usunięto klienta');
+    return { ok: true, removedFiles: files.length };
   });
 
   // --- Osoby kontaktowe ---
