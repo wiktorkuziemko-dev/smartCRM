@@ -55,6 +55,17 @@ docker compose up -d --build
 
 Migracje bazy danych uruchamiają się automatycznie przy starcie.
 
+### Aktualizacja na Windows (paczka .tar.gz)
+
+1. Pobierz paczkę gałęzi z GitHuba (Code → Download / link `archive/refs/heads/<gałąź>.tar.gz`) do folderu **Pobrane**.
+2. W PowerShellu, będąc **poza** folderem aplikacji (np. w `C:\claude_code`), uruchom:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\aktualizuj.ps1
+   ```
+
+Skrypt sam bierze najnowszą paczkę z folderu Pobrane, sprawdza, czy zawiera inną wersję niż działająca, kopiuje `.env`, podmienia folder (poprzednia wersja trafia do `smartcrm-poprzednia-wersja`), buduje i uruchamia aplikację. Przy błędzie przywraca poprzednią wersję. Dane w bazie nie są ruszane.
+
 ### Kopia zapasowa
 
 Dane są w dwóch wolumenach Dockera: `db-data` (baza) i `uploads` (załączniki).
