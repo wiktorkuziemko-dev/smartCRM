@@ -10,8 +10,16 @@ import { TaskItem } from '../components/TaskItem';
 import { Empty } from '../components/ui';
 import { groupTasks } from '../lib/tasks';
 import { TeamActivity } from '../components/TeamActivity';
+import { SalesDashboard } from '../components/SalesDashboard';
 
+/** Handlowiec ma własny pulpit; kierownik i admin – pulpit zespołu. */
 export function DashboardPage() {
+  const { data: me } = useMe();
+  if (!me) return null;
+  return seesAll(me) ? <ManagerDashboard /> : <SalesDashboard />;
+}
+
+function ManagerDashboard() {
   const { data: me } = useMe();
   const { data: statuses = [] } = useStatuses();
   const { data } = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get<Dashboard>('/api/dashboard') });
