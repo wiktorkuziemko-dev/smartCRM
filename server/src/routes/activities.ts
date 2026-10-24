@@ -10,7 +10,7 @@ import { config } from '../config.js';
 import { requireAuth, seesAllClients } from '../lib/auth.js';
 import { syncTaskToGoogle } from '../lib/google.js';
 import { loadClientFor, touchClient } from '../lib/access.js';
-import { idParam, parse } from '../lib/validate.js';
+import { idParam, isPastDue, PAST_DUE_ERROR, parse } from '../lib/validate.js';
 
 const ALLOWED_MIME = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
@@ -26,9 +26,12 @@ const PLANNED_TYPES = new Set(['call', 'meeting', 'email']);
 
 const taskAssignee = alias(schema.users, 'task_assignee');
 
-/** Tytuł zadania = pierwsza linia treści (przycięta). */
-function taskTitle(content: string) {
+const PLANNED_LABELS: Record<string, string> = { call: 'Telefon', meeting: 'Spotkanie', email: 'E-mail' };
+
+/** Tytuł zadania = pierwsza linia treści (przycięta); bez treści – nazwa rodzaju kontaktu. */
+function taskTitle(content: string, type: string) {
   const first = content.split('\n')[0].trim();
+  if (!first) return PLANNED_LABELS[type];
   return first.length > 120 ? `${first.slice(0, 117)}…` : first;
 }
 
@@ -72,8 +75,8 @@ export async function activityRoutes(app: FastifyInstance) {
 
   /**
    * Nowy wpis w historii: multipart z polami "type", "content" i dowolną liczbą plików "files".
-   * Dla telefonu/spotkania/e-maila wymagane jest "dueAt" – powstaje zadanie powiązane z wpisem.
-   * Termin w przeszłości oznacza kontakt, który już się odbył – zadanie jest od razu wykonane.
+   * Dla telefonu/spotkania/e-maila wymagane jest "dueAt" (nie w przeszłości) – powstaje zadanie
+   * powiązane z wpisem; opis jest wtedy opcjonalny.
    * "assigneeId" uwzględniamy tylko dla kierownika i admina; handlowiec planuje zadania dla siebie.
    */
   app.post('/api/clients/:id/activities', async (req, reply) => {
@@ -117,7 +120,7 @@ export async function activityRoutes(app: FastifyInstance) {
       throw err;
     }
 
-    if (!content.trim() && saved.length === 0) {
+    if (!PLANNED_TYPES.has(type) && !content.trim() && saved.length === 0) {
       return reply.code(400).send({ error: 'Wpis nie może być pusty' });
     }
 
@@ -125,7 +128,7 @@ export async function activityRoutes(app: FastifyInstance) {
     if (PLANNED_TYPES.has(type)) {
       const dueAt = new Date(dueRaw);
       if (!dueRaw || Number.isNaN(dueAt.getTime())) { cleanup(); return reply.code(400).send({ error: 'Wybierz datę i godzinę' }); }
-      if (!content.trim()) { cleanup(); return reply.code(400).send({ error: 'Opisz, czego dotyczy kontakt' }); }
+      if (isPastDue(dueAt)) { cleanup(); return reply.code(400).send({ error: PAST_DUE_ERROR }); }
       let assigneeId = req.user.id;
       if (seesAllClients(req.user) && assigneeRaw) {
         const [u] = await db.select({ id: schema.users.id }).from(schema.users)
@@ -135,11 +138,10 @@ export async function activityRoutes(app: FastifyInstance) {
       }
       const lines = content.trim();
       const [task] = await db.insert(schema.tasks).values({
-        title: taskTitle(lines),
+        title: taskTitle(lines, type),
         notes: lines.includes('\n') || lines.length > 120 ? lines : null,
         type: type as 'call',
         dueAt,
-        done: dueAt.getTime() <= Date.now(),
         clientId: params.id,
         assigneeId,
         createdById: req.user.id,

@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { requireAuth, seesAllClients, type SessionUser } from '../lib/auth.js';
 import { clientEditableBy, clientVisibleTo, loadClientFor } from '../lib/access.js';
 import { syncTaskToGoogle } from '../lib/google.js';
-import { idParam, optionalText, parse } from '../lib/validate.js';
+import { idParam, isPastDue, optionalText, PAST_DUE_ERROR, parse } from '../lib/validate.js';
 
 const taskBody = z.object({
   title: z.string().trim().min(1, 'Tytuł jest wymagany').max(255),
@@ -85,6 +85,7 @@ export async function taskRoutes(app: FastifyInstance) {
   app.post('/api/tasks', async (req, reply) => {
     const body = parse(taskBody, req.body, reply);
     if (!body) return;
+    if (isPastDue(body.dueAt)) return reply.code(400).send({ error: PAST_DUE_ERROR });
     if (body.clientId && !(await loadClientFor(req.user, body.clientId, reply, 'edit'))) return;
     const [task] = await db.insert(schema.tasks).values({
       ...body,
@@ -101,6 +102,9 @@ export async function taskRoutes(app: FastifyInstance) {
     if (!params || !body) return;
     const task = await loadTaskForEdit(req.user, params.id, reply);
     if (!task) return;
+    // Nowy termin nie może być wsteczny (zaległe zadanie bez zmiany terminu można dalej edytować).
+    const dueChanged = body.dueAt && Math.abs(body.dueAt.getTime() - task.dueAt.getTime()) >= 60_000;
+    if (dueChanged && isPastDue(body.dueAt!)) return reply.code(400).send({ error: PAST_DUE_ERROR });
     // Przeniesienie zadania do innego klienta wymaga prawa edycji tego klienta.
     if (body.clientId && body.clientId !== task.clientId && !(await loadClientFor(req.user, body.clientId, reply, 'edit'))) return;
     await db.update(schema.tasks).set({

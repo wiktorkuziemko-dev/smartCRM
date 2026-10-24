@@ -26,6 +26,13 @@ export const fmtSize = (bytes: number) =>
 /** Wartość dla <input type="datetime-local"> w czasie lokalnym. */
 export const toLocalInput = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm");
 
+/** Termin z pola datetime-local leży w przeszłości (z dokładnością do minuty). */
+export function isPastInput(value: string) {
+  const startOfMinute = new Date();
+  startOfMinute.setSeconds(0, 0);
+  return Boolean(value) && new Date(value) < startOfMinute;
+}
+
 export const initials = (name: string | null | undefined) =>
   (name ?? '?').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('');
 

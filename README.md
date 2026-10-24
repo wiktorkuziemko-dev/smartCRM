@@ -12,7 +12,7 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zaplanowane kontakty i historia kontaktów.
 - **Historia kontaktów**: komentarze oraz załączniki (zdjęcia, PDF, Word, Excel). Pliki można przeciągnąć albo wkleić ze schowka. Zmiany statusu i opiekuna zapisują się automatycznie.
-  - **Telefon, spotkanie i e-mail** wybiera się z datą i godziną: wpis od razu tworzy zadanie, które widać w historii i na liście zadań, z możliwością odhaczenia. Termin w przeszłości oznacza kontakt, który już się odbył, więc zapisuje się jako wykonany.
+  - **Telefon, spotkanie i e-mail** wybiera się z datą i godziną: wpis od razu tworzy zadanie, które widać w historii i na liście zadań, z możliwością odhaczenia. Opis jest opcjonalny. Nie da się zaplanować zadania z datą wsteczną, także w formularzu zadania.
   - Handlowiec planuje kontakty tylko dla siebie. Kierownik i administrator mogą wskazać inną osobę.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
 - **Tagi**: listą zarządza administrator (na start: `przetarg`), a handlowcy przypisują tagi klientom, które mogą edytować. Na liście klientów można filtrować po tagu.

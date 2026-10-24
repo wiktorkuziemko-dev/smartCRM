@@ -2,7 +2,7 @@ import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightLeft, CalendarClock, Check, FileText, Info, Mail, MessageSquare, Paperclip, Phone, Send, Trash2, Users, X } from 'lucide-react';
 import { api, type Activity, type ActivityType } from '../lib/api';
-import { fmtAgo, fmtDateTime, fmtDue, fmtSize, isOverdue, toLocalInput } from '../lib/format';
+import { fmtAgo, fmtDateTime, fmtDue, fmtSize, isOverdue, isPastInput, toLocalInput } from '../lib/format';
 import { seesAll, useMe, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText } from './ui';
 
@@ -15,9 +15,9 @@ const TYPES: { type: ActivityType; label: string; icon: typeof Phone }[] = [
 const PLANNED = new Set<ActivityType>(['call', 'meeting', 'email']);
 const PLACEHOLDERS: Partial<Record<ActivityType, string>> = {
   comment: 'Dodaj notatkę lub komentarz… (Ctrl+Enter wysyła, możesz wkleić lub przeciągnąć plik)',
-  call: 'W jakiej sprawie telefon? np. Zapytać o decyzję w sprawie oferty',
-  meeting: 'Czego dotyczy spotkanie? np. Prezentacja produktu u klienta',
-  email: 'Jaki e-mail wysłać? np. Wysłać cennik i warunki dostawy',
+  call: 'W jakiej sprawie telefon? (opcjonalnie) np. Zapytać o decyzję w sprawie oferty',
+  meeting: 'Czego dotyczy spotkanie? (opcjonalnie) np. Prezentacja produktu u klienta',
+  email: 'Jaki e-mail wysłać? (opcjonalnie) np. Wysłać cennik i warunki dostawy',
 };
 
 /** Domyślny termin: najbliższa pełna godzina. */
@@ -164,10 +164,14 @@ function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | n
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const duePast = planned && isPastInput(dueAt);
+  // Kontakt planowany: wystarczy poprawny termin (opis opcjonalny). Komentarz: treść lub plik.
+  const canSubmit = planned ? Boolean(dueAt) && !duePast : Boolean(content.trim() || files.length);
+
   const addFiles = (list: FileList | File[]) => setFiles((f) => [...f, ...Array.from(list)].slice(0, 10));
 
   async function submit() {
-    if (planned ? !content.trim() || !dueAt : !content.trim() && !files.length) return;
+    if (!canSubmit) return;
     setBusy(true);
     setError(null);
     const fd = new FormData();
@@ -224,7 +228,8 @@ function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | n
             <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
               <label className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                 <CalendarClock size={14} className="text-brand-600" /> Kiedy:
-                <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="input w-auto px-2 py-1 text-xs" />
+                <input type="datetime-local" value={dueAt} min={toLocalInput(new Date())} onChange={(e) => setDueAt(e.target.value)}
+                  className={`input w-auto px-2 py-1 text-xs ${duePast ? 'border-red-400 ring-2 ring-red-100' : ''}`} />
               </label>
               {seesAll(me) && (
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-500">
@@ -234,7 +239,8 @@ function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | n
                   </select>
                 </label>
               )}
-              {dueAt && new Date(dueAt) <= new Date() && <span className="text-xs text-emerald-600">termin minął – zapisze się jako wykonane</span>}
+              {!dueAt && <span className="text-xs text-red-600">Wybierz datę i godzinę</span>}
+              {duePast && <span className="text-xs text-red-600">Termin nie może być w przeszłości</span>}
             </div>
           )}
           {files.length > 0 && (
@@ -253,7 +259,7 @@ function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | n
             </button>
             <input ref={fileInput} type="file" multiple hidden accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
               onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }} />
-            <Button onClick={submit} disabled={busy || (planned ? !content.trim() || !dueAt : !content.trim() && !files.length)} className="px-3 py-1.5">
+            <Button onClick={submit} disabled={busy || !canSubmit} className="px-3 py-1.5">
               {planned ? <CalendarClock size={14} /> : <Send size={14} />}
               {busy ? 'Zapisywanie…' : planned ? 'Zaplanuj' : 'Dodaj'}
             </Button>

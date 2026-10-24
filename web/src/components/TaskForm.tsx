@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CalendarPlus, Trash2 } from 'lucide-react';
 import { api, type Task, type TaskType } from '../lib/api';
-import { googleCalendarLink, toLocalInput } from '../lib/format';
+import { googleCalendarLink, isPastInput, toLocalInput } from '../lib/format';
 import { seesAll, useClients, useMe, useUsers } from '../lib/queries';
 import { Button, ErrorText, Field, Modal } from './ui';
 
@@ -37,6 +37,10 @@ export function TaskForm({ task, clientId, onClose }: Props) {
     qc.invalidateQueries({ queryKey: ['clients'] }),
     qc.invalidateQueries({ queryKey: ['activities'] }),
   ]);
+
+  // Wsteczny termin zablokowany; zaległe zadanie można edytować bez zmiany terminu.
+  const dueChanged = !task || form.dueAt !== toLocalInput(new Date(task.dueAt));
+  const duePast = dueChanged && isPastInput(form.dueAt);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -85,7 +89,11 @@ export function TaskForm({ task, clientId, onClose }: Props) {
             <option value="email">E-mail</option>
           </select>
         </Field>
-        <Field label="Termin *"><input className="input" type="datetime-local" value={form.dueAt} onChange={set('dueAt')} /></Field>
+        <Field label="Termin *">
+          <input className={`input ${duePast ? 'border-red-400 ring-2 ring-red-100' : ''}`} type="datetime-local" value={form.dueAt}
+            min={toLocalInput(new Date())} onChange={set('dueAt')} />
+          {duePast && <span className="mt-1 block text-xs text-red-600">Termin nie może być w przeszłości</span>}
+        </Field>
         <Field label="Klient">
           <select className="input" value={form.clientId} onChange={set('clientId')} disabled={Boolean(clientId)}>
             <option value="">— bez klienta —</option>
@@ -111,7 +119,7 @@ export function TaskForm({ task, clientId, onClose }: Props) {
           )}
           <div className="flex-1" />
           <Button type="button" variant="secondary" onClick={onClose}>Anuluj</Button>
-          <Button type="submit" disabled={busy || !form.title.trim()}>{busy ? 'Zapisywanie…' : 'Zapisz'}</Button>
+          <Button type="submit" disabled={busy || !form.title.trim() || !form.dueAt || duePast}>{busy ? 'Zapisywanie…' : 'Zapisz'}</Button>
         </div>
         {me?.googleCalendarEmail && assignee?.id === me.id && (
           <p className="text-xs text-slate-400">Zadanie zostanie automatycznie dodane do Twojego Kalendarza Google ({me.googleCalendarEmail}).</p>
