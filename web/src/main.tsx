@@ -9,7 +9,7 @@ import { DashboardPage } from './pages/Dashboard';
 import { ClientsPage } from './pages/Clients';
 import { TasksPage } from './pages/Tasks';
 import { AdminPage } from './pages/Admin';
-import { ProfilePage } from './pages/Profile';
+import { SettingsPage } from './pages/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: true, retry: 1 } },
@@ -27,7 +27,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="clients/:id" element={<ClientsPage />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="admin" element={<AdminPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="profile" element={<Navigate to="/settings" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

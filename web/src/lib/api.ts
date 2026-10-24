@@ -2,7 +2,8 @@ export type Role = 'ADMIN' | 'MANAGER' | 'SALES';
 
 export interface Me {
   id: number; login: string; fullName: string; email: string | null; role: Role;
-  googleCalendarEmail: string | null; googleEnabled: boolean;
+  settings: { clientColumns?: string[] };
+  googleCalendarId: string | null; googleEnabled: boolean; googleServiceEmail: string | null;
 }
 export interface UserRow {
   id: number; fullName: string; role: Role; active: boolean;

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { createSession, destroySession, requireAuth } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
-import { googleEnabled } from '../config.js';
+import { getServiceAccount } from '../lib/google.js';
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', async (req, reply) => {
@@ -25,9 +25,28 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req) => {
-    const [u] = await db.select({ googleCalendarEmail: schema.users.googleCalendarEmail })
+    const [u] = await db.select({ googleCalendarId: schema.users.googleCalendarId, settings: schema.users.settings })
       .from(schema.users).where(eq(schema.users.id, req.user.id));
-    return { ...req.user, googleCalendarEmail: u?.googleCalendarEmail ?? null, googleEnabled: googleEnabled() };
+    const account = await getServiceAccount();
+    return {
+      ...req.user,
+      settings: u?.settings ?? {},
+      googleCalendarId: u?.googleCalendarId ?? null,
+      googleEnabled: Boolean(account),
+      googleServiceEmail: account?.client_email ?? null,
+    };
+  });
+
+  /** Ustawienia osobiste (np. kolumny listy klientów widoczne domyślnie). */
+  app.put('/api/me/settings', { preHandler: requireAuth }, async (req, reply) => {
+    const body = parse(z.object({
+      clientColumns: z.array(z.string().max(80)).max(100).optional(),
+    }), req.body, reply);
+    if (!body) return;
+    const [u] = await db.select({ settings: schema.users.settings }).from(schema.users).where(eq(schema.users.id, req.user.id));
+    const settings = { ...(u?.settings ?? {}), ...body };
+    await db.update(schema.users).set({ settings }).where(eq(schema.users.id, req.user.id));
+    return settings;
   });
 
   app.post('/api/auth/password', { preHandler: requireAuth }, async (req, reply) => {

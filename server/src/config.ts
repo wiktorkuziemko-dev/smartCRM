@@ -14,13 +14,7 @@ export const config = {
     login: env.ADMIN_LOGIN ?? 'admin',
     password: env.ADMIN_PASSWORD ?? 'admin123',
   },
-  /** Publiczny adres aplikacji, np. https://crm.firma.pl – potrzebny do integracji Google. */
+  /** Adres, pod którym użytkownicy otwierają aplikację – trafia do opisu wydarzeń w Kalendarzu Google. */
   appUrl: (env.APP_URL || `http://localhost:${env.PORT ?? 3000}`).replace(/\/$/, ''),
-  google: {
-    clientId: env.GOOGLE_CLIENT_ID ?? '',
-    clientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
-  },
   timezone: env.TZ ?? 'Europe/Warsaw',
 };
-
-export const googleEnabled = () => Boolean(config.google.clientId && config.google.clientSecret);

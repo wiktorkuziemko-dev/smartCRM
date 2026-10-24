@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Download, Eye, FilterX, Plus, Search } from 'lucide-react';
 import type { ClientRow, CustomField, Status, Tag } from '../lib/api';
 import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
-import { useClients, useFields, useStatuses, useTags, useVoivodeships } from '../lib/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { api, type Me } from '../lib/api';
+import { clientColumnsOf, useClients, useFields, useMe, useStatuses, useTags, useVoivodeships } from '../lib/queries';
 import { ClientPanel } from '../components/ClientPanel';
 import { ClientForm } from '../components/ClientForm';
 import { formatCustomValue } from '../components/CustomFieldInput';
@@ -22,7 +24,6 @@ interface Column {
   width: number;
 }
 
-const HIDDEN_KEY = 'smartcrm.clients.hidden';
 
 /** Filtr liczbowy: "100", ">100", "<=50", "10-20". */
 function matchNumber(value: Value, query: string) {
@@ -43,7 +44,7 @@ function matchNumber(value: Value, query: string) {
   }
 }
 
-function buildColumns(statuses: Status[], tags: Tag[], fields: CustomField[], voivodeships: string[], owners: string[]): Column[] {
+export function buildColumns(statuses: Status[], tags: Tag[], fields: CustomField[], voivodeships: string[], owners: string[]): Column[] {
   const statusById = new Map(statuses.map((s) => [s.id, s]));
   const cols: Column[] = [
     { id: 'name', label: 'Nazwa', value: (r) => r.name, filter: 'text', width: 220,
@@ -103,10 +104,18 @@ export function ClientsPage() {
   const [sort, setSort] = useState<{ id: string; desc: boolean }>({ id: 'updatedAt', desc: true });
   const [creating, setCreating] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
-  const [hidden, setHidden] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]'); } catch { return []; }
-  });
-  useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); } catch { /* ignoruj */ } }, [hidden]);
+  const { data: me } = useMe();
+  const qc = useQueryClient();
+  // Widoczne kolumny: na start z Ustawień użytkownika; zmiany w menu „Kolumny” obowiązują do odświeżenia strony.
+  const [visible, setVisible] = useState<string[]>(() => clientColumnsOf(me));
+  const [savedMsg, setSavedMsg] = useState('');
+
+  async function saveDefaultColumns() {
+    const settings = await api.put<Me['settings']>('/api/me/settings', { clientColumns: visible });
+    qc.setQueryData<Me>(['me'], (old) => (old ? { ...old, settings } : old));
+    setSavedMsg('Zapisano jako domyślne');
+    setTimeout(() => setSavedMsg(''), 2500);
+  }
 
   const allColumns = useMemo(
     // Filtr „Opiekun” pokazuje tylko osoby, które są opiekunami widocznych klientów.
@@ -114,7 +123,7 @@ export function ClientsPage() {
       [...new Set(clients.map((c) => c.ownerName).filter((n): n is string => Boolean(n)))].sort((a, b) => a.localeCompare(b, 'pl'))),
     [statuses, tags, fields, voivodeships, clients],
   );
-  const columns = allColumns.filter((c) => !hidden.includes(c.id));
+  const columns = allColumns.filter((c) => c.id === 'name' || visible.includes(c.id));
   const textOf = (c: Column, r: ClientRow) => (c.text ? c.text(r) : String(c.value(r) ?? ''));
 
   const rows = useMemo(() => {
@@ -177,14 +186,24 @@ export function ClientsPage() {
               {showColumns && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowColumns(false)} />
-                  <div className="absolute right-0 z-20 mt-1 max-h-80 w-56 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                    {allColumns.filter((c) => c.id !== 'name').map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
-                        <input type="checkbox" className="accent-brand-600" checked={!hidden.includes(c.id)}
-                          onChange={(e) => setHidden((h) => (e.target.checked ? h.filter((x) => x !== c.id) : [...h, c.id]))} />
-                        {c.label}
-                      </label>
-                    ))}
+                  <div className="absolute right-0 z-20 mt-1 w-60 rounded-xl border border-slate-200 bg-white shadow-xl">
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {allColumns.filter((c) => c.id !== 'name').map((c) => (
+                        <label key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+                          <input type="checkbox" className="accent-brand-600" checked={visible.includes(c.id)}
+                            onChange={(e) => setVisible((v) => (e.target.checked ? [...v, c.id] : v.filter((x) => x !== c.id)))} />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="space-y-1 border-t border-slate-100 p-2">
+                      <Button variant="secondary" className="w-full py-1.5 text-xs" onClick={saveDefaultColumns}>
+                        {savedMsg || 'Zapisz jako domyślne'}
+                      </Button>
+                      <button onClick={() => setVisible(clientColumnsOf(me))} className="w-full rounded-md py-1 text-xs text-slate-500 hover:bg-slate-50">
+                        Przywróć moje domyślne
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

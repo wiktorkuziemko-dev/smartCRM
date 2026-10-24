@@ -5,12 +5,12 @@ import { purgeClient, restoreClient } from '../lib/archive';
 import { fmtDateTime, fmtNip } from '../lib/format';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArchiveRestore, ArrowDown, ArrowUp, Eye, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArchiveRestore, ArrowDown, ArrowUp, CalendarDays, Check, Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type AccessLevel, type ArchivedClient } from '../lib/api';
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
@@ -33,6 +33,7 @@ export function AdminPage() {
       {tab === 'Tagi' && <TagsTab />}
       {tab === 'Pola klienta' && <FieldsTab />}
       {tab === 'Archiwum' && <ArchiveTab />}
+      {tab === 'Integracje' && <IntegrationsTab />}
     </div>
   );
 }
@@ -449,5 +450,79 @@ function ArchiveTab() {
         {!isLoading && rows.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Archiwum jest puste.</p>}
       </Card>
     </>
+  );
+}
+
+// ---------------- Integracje ----------------
+function IntegrationsTab() {
+  const qc = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ['admin-google'],
+    queryFn: () => api.get<{ serviceEmail: string | null; connectedUsers: number }>('/api/admin/google'),
+  });
+  const [json, setJson] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-google'] }), qc.invalidateQueries({ queryKey: ['me'] })]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.put('/api/admin/google', { json });
+      setJson('');
+      await refresh();
+    } catch (err) { setError(err); } finally { setBusy(false); }
+  }
+
+  async function remove() {
+    if (!confirm('Wyłączyć integrację z Kalendarzem Google? Zadania przestaną trafiać do kalendarzy użytkowników.')) return;
+    await api.del('/api/admin/google');
+    await refresh();
+  }
+
+  async function readFile(file: File | undefined) {
+    if (file) setJson(await file.text());
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 flex items-center gap-2 font-semibold"><CalendarDays size={18} className="text-brand-600" /> Kalendarz Google</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Dzięki integracji zadania użytkowników (telefony, spotkania, e-maile) trafiają automatycznie do ich Kalendarzy Google.
+          Aplikacja korzysta z jednego <b>konta usługi Google</b>. Każdy użytkownik udostępnia mu swój kalendarz w zakładce Ustawienia.
+          Działa w sieci lokalnej, bez domeny i bez logowania użytkowników do Google.
+        </p>
+
+        {data?.serviceEmail ? (
+          <div className="space-y-3">
+            <p className="flex flex-wrap items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              <Check size={16} /> Integracja włączona. Konto usługi: <code className="break-all font-medium">{data.serviceEmail}</code>
+            </p>
+            <p className="text-sm text-slate-600">Połączone kalendarze użytkowników: <b>{data.connectedUsers}</b></p>
+            <Button variant="danger" onClick={remove}><Trash2 size={15} /> Wyłącz integrację</Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ol className="list-decimal space-y-1.5 rounded-xl bg-slate-50 py-3 pl-8 pr-4 text-sm text-slate-600">
+              <li>Wejdź na <a className="text-brand-600 hover:underline" href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">console.cloud.google.com</a> i utwórz projekt (np. „SmartCRM”).</li>
+              <li>W menu <b>Interfejsy API i usługi → Biblioteka</b> wyszukaj <b>Google Calendar API</b> i kliknij <b>Włącz</b>.</li>
+              <li>W menu <b>Administracja (IAM) → Konta usługi</b> utwórz konto usługi (bez dodatkowych ról).</li>
+              <li>Na koncie usługi otwórz zakładkę <b>Klucze → Dodaj klucz → Utwórz nowy klucz → JSON</b>. Pobierze się plik .json.</li>
+              <li>Wgraj ten plik poniżej. Potem każdy użytkownik połączy swój kalendarz w zakładce <b>Ustawienia</b>.</li>
+            </ol>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500 hover:border-brand-500 hover:text-brand-600">
+              <Upload size={18} /> {json ? 'Wczytano plik klucza – kliknij „Zapisz”' : 'Wybierz plik klucza .json'}
+              <input type="file" accept=".json,application/json" hidden onChange={(e) => readFile(e.target.files?.[0])} />
+            </label>
+            <ErrorText error={error} />
+            <Button onClick={save} disabled={busy || !json}>{busy ? 'Sprawdzam klucz w Google…' : 'Zapisz'}</Button>
+            <p className="text-xs text-slate-400">Klucz jest przechowywany w bazie aplikacji i nigdy nie jest wysyłany do przeglądarki.</p>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

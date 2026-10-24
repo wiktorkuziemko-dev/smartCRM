@@ -28,5 +28,12 @@ export const useTasks = (params: { clientId?: number; assigneeId?: number; statu
   return useQuery({ queryKey: ['tasks', params], queryFn: () => api.get<Task[]>(`/api/tasks?${qs}`) });
 };
 
+/** Kolumny listy klientów widoczne domyślnie, dopóki użytkownik nie zapisze własnych w Ustawieniach. */
+export const DEFAULT_CLIENT_COLUMNS = ['name', 'tags', 'owner', 'updatedAt'];
+export const clientColumnsOf = (me?: Me) => {
+  const cols = me?.settings.clientColumns?.length ? me.settings.clientColumns : DEFAULT_CLIENT_COLUMNS;
+  return cols.includes('name') ? cols : ['name', ...cols];
+};
+
 export const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrator', MANAGER: 'Kierownik', SALES: 'Handlowiec' };
 export const seesAll = (me?: Me) => me?.role === 'ADMIN' || me?.role === 'MANAGER';

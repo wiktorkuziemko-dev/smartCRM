@@ -24,7 +24,8 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 - **Archiwum klientów**: usunięcie klienta przenosi go do archiwum. Klient znika z listy, zadań i pulpitu wszystkich użytkowników, a jego zadania z Kalendarza Google. W *Administracja → Archiwum* administrator może go podejrzeć, **przywrócić** albo **usunąć trwale**. Trwałe usunięcie kasuje wszystkie dane klienta: osoby kontaktowe, historię, pliki załączników, zadania, tagi i ustawienia dostępu.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
 - **Zadania i przypomnienia**: widok „Moje zadania” i pulpit (zaległe / dziś / najbliższe 7 dni, późniejsze zwinięte), przypomnienie w aplikacji 15 minut przed terminem.
-- **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć pełną automatyczną synchronizację (opis niżej).
+- **Kalendarz Google**: przycisk „Dodaj do Kalendarza Google” przy zadaniu działa bez konfiguracji. Opcjonalnie można włączyć automatyczną synchronizację zadań z kalendarzami użytkowników (opis niżej).
+- **Ustawienia użytkownika**: kolumny listy klientów widoczne domyślnie (na start: nazwa, tagi, opiekun, ostatnia zmiana), połączenie z Kalendarzem Google, zmiana hasła.
 - Kontrola duplikatów po NIP.
 
 ## Uruchomienie (serwer z Dockerem)
@@ -81,16 +82,18 @@ Odtworzenie bazy: `cat backup.sql | docker compose exec -T db psql -U smartcrm s
 
 ## Integracja z Kalendarzem Google (opcjonalnie)
 
-Gdy integracja jest włączona, każdy użytkownik może w **Profilu** połączyć swój Kalendarz Google. Od tej chwili jego zadania same pojawiają się w kalendarzu, z przypomnieniem 15 minut przed terminem, i aktualizują się przy każdej zmianie. Wykonane lub usunięte zadanie znika z kalendarza.
+Zadania użytkowników (telefony, spotkania, e-maile) mogą same trafiać do ich Kalendarzy Google, z przypomnieniem 15 minut przed terminem. Wydarzenie aktualizuje się przy każdej zmianie zadania i znika, gdy zadanie jest wykonane lub usunięte. Aplikacja korzysta z jednego **konta usługi Google**, więc działa w sieci lokalnej, bez domeny i bez logowania użytkowników do Google.
 
-Serwer łączy się z Google tylko w kierunku wychodzącym, więc integracja działa także w sieci lokalnej. Wymagania:
+**Administrator (raz):**
+1. Na [console.cloud.google.com](https://console.cloud.google.com/) utwórz projekt i włącz **Google Calendar API**.
+2. W *Administracja (IAM) → Konta usługi* utwórz konto usługi, a na nim *Klucze → Dodaj klucz → JSON*.
+3. W SmartCRM: **Administracja → Integracje** → wgraj pobrany plik .json.
 
-1. Aplikacja musi być otwierana pod **nazwą domenową**, np. `https://crm.firma.pl`. Wystarczy wpis w wewnętrznym DNS. Google nie przyjmuje adresów IP w adresie przekierowania.
-2. W [Google Cloud Console](https://console.cloud.google.com/):
-   - utwórz projekt i włącz **Google Calendar API**,
-   - skonfiguruj **ekran zgody OAuth**: typ „Internal”, jeśli firma ma Google Workspace, w przeciwnym razie „External” i dodaj użytkowników testowych,
-   - utwórz **Identyfikator klienta OAuth** typu *Aplikacja internetowa* z adresem przekierowania `https://crm.firma.pl/api/google/callback`.
-3. W pliku `.env` ustaw `APP_URL`, `GOOGLE_CLIENT_ID` i `GOOGLE_CLIENT_SECRET`, a następnie uruchom `docker compose up -d`.
+**Każdy użytkownik:**
+1. W ustawieniach Kalendarza Google udostępnij swój kalendarz adresowi konta usługi (widać go w SmartCRM w **Ustawieniach**) z uprawnieniem **„Wprowadzanie zmian w wydarzeniach”**.
+2. W SmartCRM: **Ustawienia → Kalendarz Google** → wklej identyfikator kalendarza (np. adres Gmail), jego adres iCal albo link i kliknij „Zapisz i sprawdź”.
+
+Sam link do kalendarza nie wystarcza: daje tylko dostęp do odczytu. Dlatego potrzebne jest udostępnienie kalendarza kontu usługi. Serwer musi mieć dostęp do internetu (połączenia wychodzące do `googleapis.com`).
 
 ## HTTPS (zalecane)
 

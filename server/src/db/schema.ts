@@ -18,9 +18,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }),
   role: roleEnum('role').notNull().default('SALES'),
   active: boolean('active').notNull().default(true),
-  // Google Calendar (opcjonalnie, gdy skonfigurowano OAuth)
-  googleRefreshToken: text('google_refresh_token'),
-  googleCalendarEmail: varchar('google_calendar_email', { length: 255 }),
+  // ID kalendarza Google udostępnionego kontu usługi aplikacji (zadania trafiają do niego).
+  googleCalendarId: varchar('google_calendar_id', { length: 255 }),
+  // Ustawienia osobiste, np. kolumny listy klientów widoczne domyślnie.
+  settings: jsonb('settings').$type<UserSettings>().notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -145,6 +146,14 @@ export const tagAccess = pgTable('tag_access', {
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   level: accessLevelEnum('level').notNull().default('edit'),
 }, (t) => [primaryKey({ columns: [t.tagId, t.userId] }), index('tag_access_user_idx').on(t.userId)]);
+
+/** Ustawienia aplikacji (klucz → wartość), np. klucz konta usługi Google. */
+export const appSettings = pgTable('app_settings', {
+  key: varchar('key', { length: 64 }).primaryKey(),
+  value: jsonb('value').notNull(),
+});
+
+export interface UserSettings { clientColumns?: string[] }
 
 export type User = typeof users.$inferSelect;
 export type Role = User['role'];

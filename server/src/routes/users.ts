@@ -19,7 +19,7 @@ export async function userRoutes(app: FastifyInstance) {
       fullName: u.fullName,
       role: u.role,
       active: u.active,
-      ...(req.user.role === 'ADMIN' ? { login: u.login, email: u.email, googleConnected: Boolean(u.googleRefreshToken) } : {}),
+      ...(req.user.role === 'ADMIN' ? { login: u.login, email: u.email, googleConnected: Boolean(u.googleCalendarId) } : {}),
     }));
   });
 

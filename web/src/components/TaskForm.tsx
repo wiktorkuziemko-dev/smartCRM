@@ -111,7 +111,7 @@ export function TaskForm({ task, clientId, onClose }: Props) {
         <ErrorText error={error} />
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {task && <Button type="button" variant="danger" onClick={remove}><Trash2 size={15} /> Usuń</Button>}
-          {form.title && form.dueAt && (!me?.googleCalendarEmail || assignee?.id !== me.id) && (
+          {form.title && form.dueAt && (!me?.googleCalendarId || assignee?.id !== me.id) && (
             <a className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm text-brand-600 hover:bg-brand-50"
               href={googleCalendarLink(calTitle, new Date(form.dueAt).toISOString(), form.notes)} target="_blank" rel="noreferrer">
               <CalendarPlus size={15} /> Dodaj do Kalendarza Google
@@ -121,8 +121,8 @@ export function TaskForm({ task, clientId, onClose }: Props) {
           <Button type="button" variant="secondary" onClick={onClose}>Anuluj</Button>
           <Button type="submit" disabled={busy || !form.title.trim() || !form.dueAt || duePast}>{busy ? 'Zapisywanie…' : 'Zapisz'}</Button>
         </div>
-        {me?.googleCalendarEmail && assignee?.id === me.id && (
-          <p className="text-xs text-slate-400">Zadanie zostanie automatycznie dodane do Twojego Kalendarza Google ({me.googleCalendarEmail}).</p>
+        {me?.googleCalendarId && assignee?.id === me.id && (
+          <p className="text-xs text-slate-400">Zadanie zostanie automatycznie dodane do Twojego Kalendarza Google ({me.googleCalendarId}).</p>
         )}
       </form>
     </Modal>
