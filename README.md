@@ -67,18 +67,32 @@ Migracje bazy danych uruchamiają się automatycznie przy starcie.
 
 Skrypt sam bierze najnowszą paczkę z folderu Pobrane, sprawdza, czy zawiera inną wersję niż działająca, kopiuje `.env`, podmienia folder (poprzednia wersja trafia do `smartcrm-poprzednia-wersja`), buduje i uruchamia aplikację. Przy błędzie przywraca poprzednią wersję. Dane w bazie nie są ruszane.
 
-### Kopia zapasowa
+### Kopia zapasowa (Windows)
 
-Dane są w dwóch wolumenach Dockera: `db-data` (baza) i `uploads` (załączniki).
+`backup.ps1` robi kopię bazy danych, załączników i pliku `.env` do folderu `smartcrm-kopie` obok folderu aplikacji. Każda kopia ma osobny podfolder z datą i godziną. Domyślnie zostaje 14 najnowszych kopii, a przebieg zapisuje się w `smartcrm-kopie\backup.log`.
 
-```bash
-# baza danych
-docker compose exec db pg_dump -U smartcrm smartcrm > backup-$(date +%F).sql
-# załączniki
-docker run --rm -v smartcrm_uploads:/data -v "$PWD":/backup alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\backup.ps1
+# inny folder i liczba kopii:
+powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\backup.ps1 -Cel D:\Kopie\SmartCRM -Zachowaj 30
 ```
 
-Odtworzenie bazy: `cat backup.sql | docker compose exec -T db psql -U smartcrm smartcrm`.
+Codzienne uruchamianie (Harmonogram zadań Windows; jednorazowo w PowerShellu):
+
+```powershell
+$akcja = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\backup.ps1'
+$kiedy = New-ScheduledTaskTrigger -Daily -At 12:30
+$opcje = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName 'SmartCRM - kopia zapasowa' -Action $akcja -Trigger $kiedy -Settings $opcje
+```
+
+Odtworzenie z kopii (najpierw automatycznie robi kopię bieżącego stanu):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\przywroc.ps1 -Kopia C:\claude_code\smartcrm-kopie\2026-10-24_123000
+```
+
+Plik `.env` w kopii zawiera hasła, więc kopie przechowuj w bezpiecznym miejscu. Trzymaj też co najmniej jedną kopię poza komputerem z aplikacją (dysk sieciowy, dysk zewnętrzny).
 
 ## Integracja z Kalendarzem Google (opcjonalnie)
 
