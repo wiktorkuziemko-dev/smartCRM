@@ -6,7 +6,7 @@ import { fmtDateTime, fmtNip } from '../lib/format';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, ArrowDown, ArrowUp, CalendarDays, Check, Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
-import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type AccessLevel, type ArchivedClient } from '../lib/api';
+import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type ArchivedClient } from '../lib/api';
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
@@ -58,7 +58,7 @@ function UsersTab() {
   return (
     <>
       <div className="mb-3 flex justify-between">
-        <p className="text-sm text-slate-500">Handlowiec widzi swoich klientów oraz tych, do których dasz mu dostęp (podgląd lub edycja, na karcie klienta lub przez tagi). Kierownik widzi i edytuje wszystkich klientów. Tylko administrator może usuwać klientów i zarządzać ustawieniami.</p>
+        <p className="text-sm text-slate-500">Handlowiec widzi i edytuje klientów, których jest opiekunem (dodani przez niego stają się jego), oraz tych, do których admin lub kierownik da mu dostęp na karcie klienta. Kierownik widzi i edytuje wszystkich klientów i zarządza dostępem. Tylko administrator usuwa klientów i zarządza ustawieniami.</p>
         <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj użytkownika</Button>
       </div>
       <Card>
@@ -211,13 +211,12 @@ function StatusForm({ status, onClose }: { status?: Status; onClose: () => void 
 // ---------------- Tagi ----------------
 function TagsTab() {
   const { data: tags = [] } = useTags();
-  const { data: users = [] } = useUsers();
   const qc = useQueryClient();
   const [edit, setEdit] = useState<{ tag?: Tag } | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ['tags'] });
 
   async function remove(t: Tag) {
-    if (!confirm(`Usunąć tag "#${t.name}"? Zniknie ze wszystkich klientów, a handlowcy stracą dostęp nadany przez ten tag.`)) return;
+    if (!confirm(`Usunąć tag "#${t.name}"? Zniknie ze wszystkich klientów.`)) return;
     await api.del(`/api/tags/${t.id}`);
     await refresh();
     qc.invalidateQueries({ queryKey: ['clients'] });
@@ -226,25 +225,14 @@ function TagsTab() {
   return (
     <>
       <div className="mb-3 flex justify-between gap-4">
-        <p className="text-sm text-slate-500">Handlowcy przypisują tagi klientom, wybierając je z tej listy. Przy każdym tagu możesz nadać handlowcom dostęp do <b>wszystkich klientów z tym tagiem</b> (podgląd lub pełna edycja). Ustawienie dostępu na karcie klienta ma pierwszeństwo przed tagami.</p>
+        <p className="text-sm text-slate-500">Tagi służą do opisywania i grupowania klientów (np. filtrowania listy). Handlowcy przypisują je klientom, wybierając z tej listy. Tagi nie wpływają na to, kto widzi klienta – dostęp ustawia się na karcie klienta.</p>
         <Button onClick={() => setEdit({})} className="shrink-0"><Plus size={16} /> Dodaj tag</Button>
       </div>
       <Card>
         {tags.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">Brak tagów.</p>}
         {tags.map((t, i) => (
           <div key={t.id} className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-0">
-            <div className="w-36"><TagChip name={t.name} color={t.color} /></div>
-            <div className="flex flex-1 flex-wrap items-center gap-1.5 text-xs text-slate-500">
-              {t.access?.length ? t.access.map((a) => {
-                const u = users.find((x) => x.id === a.userId);
-                return u && (
-                  <span key={a.userId} className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2">
-                    <Avatar name={u.fullName} size={18} />{u.fullName}
-                    <span className={a.level === 'edit' ? 'text-brand-600' : 'text-amber-600'}>· {a.level === 'edit' ? 'edycja' : 'podgląd'}</span>
-                  </span>
-                );
-              }) : <span className="text-slate-400">brak dodatkowego dostępu</span>}
-            </div>
+            <div className="flex-1"><TagChip name={t.name} color={t.color} /></div>
             <button disabled={i === 0} onClick={() => move(tags.map((x) => x.id), i, -1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowUp size={15} /></button>
             <button disabled={i === tags.length - 1} onClick={() => move(tags.map((x) => x.id), i, 1, '/api/tags-order').then(refresh)} className="text-slate-400 hover:text-brand-600 disabled:opacity-30"><ArrowDown size={15} /></button>
             <button onClick={() => setEdit({ tag: t })} className="text-slate-400 hover:text-brand-600"><Pencil size={15} /></button>
@@ -259,10 +247,8 @@ function TagsTab() {
 
 function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
   const qc = useQueryClient();
-  const { data: users = [] } = useUsers();
-  const [form, setForm] = useState({ name: tag?.name ?? '', color: tag?.color ?? '#0ea5e9', access: tag?.access ?? [] });
+  const [form, setForm] = useState({ name: tag?.name ?? '', color: tag?.color ?? '#0ea5e9' });
   const [error, setError] = useState<unknown>(null);
-  const sales = users.filter((u) => u.role === 'SALES' && u.active);
 
   async function save() {
     try {
@@ -274,12 +260,6 @@ function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
     } catch (err) { setError(err); }
   }
 
-  const levelOf = (userId: number): AccessLevel => form.access.find((a) => a.userId === userId)?.level ?? 'none';
-  const setLevel = (userId: number, level: AccessLevel) => setForm((f) => ({
-    ...f,
-    access: [...f.access.filter((a) => a.userId !== userId), ...(level === 'none' ? [] : [{ userId, level }])],
-  }));
-
   return (
     <Modal title={tag ? 'Edytuj tag' : 'Nowy tag'} onClose={onClose}>
       <div className="space-y-4">
@@ -288,36 +268,10 @@ function TagForm({ tag, onClose }: { tag?: Tag; onClose: () => void }) {
           <Field label="Kolor"><input type="color" className="h-[38px] w-16 cursor-pointer rounded-lg border border-slate-200" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} /></Field>
         </div>
         <div><span className="label">Podgląd</span><TagChip name={form.name.toLowerCase() || 'tag'} color={form.color} /></div>
-        <div>
-          <span className="label">Dostęp handlowców do wszystkich klientów z tym tagiem</span>
-          <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-xl border border-slate-200 p-2">
-            {sales.map((u) => (
-              <div key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
-                <Avatar name={u.fullName} size={22} /> <span className="flex-1">{u.fullName}</span>
-                <LevelSwitch value={levelOf(u.id)} onChange={(l) => setLevel(u.id, l)} />
-              </div>
-            ))}
-            {sales.length === 0 && <p className="px-2 py-1 text-sm text-slate-400">Brak aktywnych handlowców.</p>}
-          </div>
-        </div>
         <ErrorText error={error} />
         <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onClose}>Anuluj</Button><Button onClick={save} disabled={!form.name.trim()}>Zapisz</Button></div>
       </div>
     </Modal>
-  );
-}
-
-function LevelSwitch({ value, onChange }: { value: AccessLevel; onChange: (l: AccessLevel) => void }) {
-  const options: [AccessLevel, string, string][] = [['none', 'Brak', 'bg-white text-slate-700'], ['view', 'Podgląd', 'bg-amber-500 text-white'], ['edit', 'Edycja', 'bg-brand-600 text-white']];
-  return (
-    <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
-      {options.map(([level, label, active]) => (
-        <button key={level} type="button" onClick={() => onChange(level)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${value === level ? `${active} shadow-sm` : 'text-slate-500 hover:text-slate-800'}`}>
-          {label}
-        </button>
-      ))}
-    </div>
   );
 }
 

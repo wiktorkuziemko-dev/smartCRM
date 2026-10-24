@@ -6,8 +6,8 @@ Działa w Dockerze na serwerze w sieci lokalnej.
 ## Funkcje
 
 - **Logowanie i role**: Administrator, Kierownik, Handlowiec
-  - *Handlowiec* ma pełny dostęp do swoich klientów (jest ich opiekunem). Do pozostałych klientów dostęp nadaje mu administrator: **brak**, **tylko podgląd** albo **pełna edycja**.
-  - *Kierownik* widzi i edytuje wszystkich klientów i zadania, zmienia opiekunów i przypisuje zadania.
+  - *Handlowiec* widzi i edytuje klientów, których jest opiekunem. Klient dodany przez handlowca automatycznie staje się jego. Innych klientów nie widzi, chyba że admin lub kierownik nada mu dostęp na karcie klienta.
+  - *Kierownik* widzi i edytuje wszystkich klientów i zadania, zmienia opiekunów, przypisuje zadania i zarządza dostępem handlowców. Na pulpicie widzi tabelę aktywności handlowców.
   - *Administrator* ma uprawnienia kierownika, a do tego zarządza użytkownikami, statusami, tagami, polami klienta i dostępem handlowców. **Tylko administrator może usuwać (archiwizować) klientów.**
 - **Lista klientów**: wyszukiwarka, sortowanie i filtrowanie po każdej kolumnie (także po polach dodatkowych), wybór widocznych kolumn i **eksport do XLSX** (eksportuje to, co widać po filtrach).
 - **Karta klienta** w prawym panelu: osoba kontaktowa, krótki opis, status w lejku (klikalny pasek), szczegóły, zaplanowane kontakty i historia kontaktów.
@@ -15,12 +15,9 @@ Działa w Dockerze na serwerze w sieci lokalnej.
   - **Telefon, spotkanie i e-mail** wybiera się z datą i godziną: wpis od razu tworzy zadanie, które widać w historii i na liście zadań, z możliwością odhaczenia. Opis jest opcjonalny. Nie da się zaplanować zadania z datą wsteczną, także w formularzu zadania.
   - Handlowiec planuje kontakty tylko dla siebie. Kierownik i administrator mogą wskazać inną osobę.
 - **Statusy klienta (lejek)**: definiuje je administrator (nazwa, kolor, kolejność). Handlowiec wybiera wyłącznie z tej listy.
-- **Tagi**: listą zarządza administrator (na start: `przetarg`), a handlowcy przypisują tagi klientom, które mogą edytować. Na liście klientów można filtrować po tagu.
-- **Dostęp handlowców do klientów** (brak / podgląd / edycja), ustawiany przez administratora:
-  - **na karcie klienta**, w sekcji „Dostęp handlowców”, osobno dla każdego handlowca,
-  - **przez tag**, w *Administracja → Tagi*: dostęp do wszystkich klientów z danym tagiem.
-
-  Zasady: opiekun ma zawsze pełną edycję. Ustawienie na karcie klienta ma pierwszeństwo przed tagami, także jawne „Brak”. Bez ustawienia na karcie liczy się najwyższy poziom spośród tagów klienta. Przy podglądzie handlowiec widzi dane, historię i zadania, ale nie może niczego zmieniać. Wyjątek: zadania przypisane do niego samego może edytować i odhaczać.
+- **Tagi**: wyłącznie informacyjne, do opisywania i grupowania klientów (filtr na liście). Listą zarządza administrator, a handlowcy przypisują tagi klientom. Tagi nie wpływają na dostęp.
+- **Dostęp do klientów** (jedno miejsce: karta klienta → „Dostęp handlowców”, tylko admin i kierownik): dla każdego handlowca **brak**, **podgląd** albo **edycja**. Domyślnie klienta widzi i edytuje tylko opiekun, a admin lub kierownik może to zmienić, także opiekunowi. Klient bez opiekuna (np. z importu) jest widoczny tylko dla admina i kierownika. Każda zmiana dostępu zapisuje się w historii klienta.
+- **Aktywność handlowców** (pulpit kierownika i admina): dziś, wczoraj i ostatnie 7 dni: wejścia do aplikacji (logowania i powroty po ≥ 30 min przerwy), spotkania, telefony, e-maile, komentarze, nowi klienci i ostatnia aktywność.
 - **Archiwum klientów**: usunięcie klienta przenosi go do archiwum. Klient znika z listy, zadań i pulpitu wszystkich użytkowników, a jego zadania z Kalendarza Google. W *Administracja → Archiwum* administrator może go podejrzeć, **przywrócić** albo **usunąć trwale**. Trwałe usunięcie kasuje wszystkie dane klienta: osoby kontaktowe, historię, pliki załączników, zadania, tagi i ustawienia dostępu.
 - **Pola dodatkowe**: administrator dodaje własne pola (tekst, liczba, data, lista wyboru, tak/nie).
 - **Zadania i przypomnienia**: widok „Moje zadania” i pulpit (zaległe / dziś / najbliższe 7 dni, późniejsze zwinięte), przypomnienie w aplikacji 15 minut przed terminem.

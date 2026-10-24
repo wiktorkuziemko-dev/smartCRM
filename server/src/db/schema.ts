@@ -22,8 +22,16 @@ export const users = pgTable('users', {
   googleCalendarId: varchar('google_calendar_id', { length: 255 }),
   // Ustawienia osobiste, np. kolumny listy klientów widoczne domyślnie.
   settings: jsonb('settings').$type<UserSettings>().notNull().default({}),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Rejestr logowań – do statystyk aktywności handlowców. */
+export const loginEvents = pgTable('login_events', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('login_events_user_at_idx').on(t.userId, t.at)]);
 
 export const sessions = pgTable('sessions', {
   id: varchar('id', { length: 64 }).primaryKey(),
@@ -70,6 +78,7 @@ export const clients = pgTable('clients', {
   // Archiwum: klient ukryty w aplikacji, admin może go przywrócić albo usunąć trwale.
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: integer('archived_by_id').references(() => users.id, { onDelete: 'set null' }),
+  createdById: integer('created_by_id').references(() => users.id, { onDelete: 'set null' }),
 }, (t) => [index('clients_owner_idx').on(t.ownerId)]);
 
 export const contacts = pgTable('contacts', {
@@ -131,8 +140,9 @@ export const clientTags = pgTable('client_tags', {
 }, (t) => [primaryKey({ columns: [t.clientId, t.tagId] }), index('client_tags_tag_idx').on(t.tagId)]);
 
 /**
- * Dostęp handlowca do konkretnego klienta ustawiony przez admina.
- * Ma pierwszeństwo przed dostępem wynikającym z tagów (także 'none' – jawny brak dostępu).
+ * Dostęp handlowca do klienta ustawiony przez admina lub kierownika na karcie klienta.
+ * Bez wpisu: opiekun ma edycję, pozostali handlowcy – brak dostępu.
+ * Wpis ma pierwszeństwo, także dla opiekuna ('none' / 'view' odbiera mu edycję).
  */
 export const clientAccess = pgTable('client_access', {
   clientId: integer('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
@@ -140,12 +150,6 @@ export const clientAccess = pgTable('client_access', {
   level: accessLevelEnum('level').notNull().default('edit'),
 }, (t) => [primaryKey({ columns: [t.clientId, t.userId] }), index('client_access_user_idx').on(t.userId)]);
 
-/** Dostęp handlowca do wszystkich klientów oznaczonych danym tagiem ('view' lub 'edit'). */
-export const tagAccess = pgTable('tag_access', {
-  tagId: integer('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  level: accessLevelEnum('level').notNull().default('edit'),
-}, (t) => [primaryKey({ columns: [t.tagId, t.userId] }), index('tag_access_user_idx').on(t.userId)]);
 
 /** Ustawienia aplikacji (klucz → wartość), np. klucz konta usługi Google. */
 export const appSettings = pgTable('app_settings', {

@@ -142,7 +142,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           )}
         </Section>
 
-        {me?.role === 'ADMIN' && !archived && <VisibilitySection client={client} />}
+        {seesAll(me) && !archived && <VisibilitySection client={client} />}
 
         {/* Zadania planuje się z historii kontaktów (telefon / spotkanie / e-mail) – tu tylko podgląd i odhaczanie. */}
         <Section title={`Zaplanowane (${tasks.length})`}>
@@ -201,76 +201,66 @@ function HeaderTags({ client, canEdit }: { client: ClientDetail; canEdit: boolea
   );
 }
 
-const LEVELS: { level: AccessLevel; label: string }[] = [
-  { level: 'none', label: 'Brak' },
-  { level: 'view', label: 'Podgląd' },
-  { level: 'edit', label: 'Edycja' },
+const LEVELS: { level: AccessLevel; label: string; active: string }[] = [
+  { level: 'none', label: 'Brak', active: 'bg-white text-slate-700' },
+  { level: 'view', label: 'Podgląd', active: 'bg-amber-500 text-white' },
+  { level: 'edit', label: 'Edycja', active: 'bg-brand-600 text-white' },
 ];
-const LEVEL_RANK: Record<AccessLevel, number> = { none: 0, view: 1, edit: 2 };
 
-/** Admin: poziom dostępu każdego handlowca do tego klienta (brak / podgląd / pełna edycja). */
+/**
+ * Admin i kierownik: poziom dostępu każdego handlowca do tego klienta.
+ * Domyślnie opiekun ma edycję, a pozostali handlowcy nie widzą klienta.
+ */
 function VisibilitySection({ client }: { client: ClientDetail }) {
   const { data: users = [] } = useUsers();
-  const { data: tags = [] } = useTags();
   const qc = useQueryClient();
-  const sales = users.filter((u) => u.role === 'SALES' && u.active && u.id !== client.ownerId);
+  const [error, setError] = useState<unknown>(null);
+  const sales = users.filter((u) => u.role === 'SALES' && u.active)
+    .sort((a, b) => Number(b.id === client.ownerId) - Number(a.id === client.ownerId));
   const rules = new Map((client.accessRules ?? []).map((r) => [r.userId, r.level]));
 
-  // Poziom wynikający z tagów klienta (ustawienia w Administracja → Tagi).
-  function fromTags(userId: number): { level: AccessLevel; tags: string[] } {
-    let level: AccessLevel = 'none';
-    const names: string[] = [];
-    for (const t of tags.filter((t) => client.tagIds.includes(t.id))) {
-      const a = t.access?.find((x) => x.userId === userId);
-      if (!a) continue;
-      names.push(t.name);
-      if (LEVEL_RANK[a.level] > LEVEL_RANK[level]) level = a.level;
-    }
-    return { level, tags: names };
-  }
-
-  async function set(userId: number, level: AccessLevel | null) {
-    await api.put(`/api/clients/${client.id}/access/${userId}`, { level });
-    await qc.invalidateQueries({ queryKey: ['client', client.id] });
+  async function set(userId: number, level: AccessLevel) {
+    setError(null);
+    try {
+      await api.put(`/api/clients/${client.id}/access/${userId}`, { level });
+      await Promise.all(['client', 'activities'].map((k) => qc.invalidateQueries({ queryKey: [k, client.id] })));
+    } catch (err) { setError(err); }
   }
 
   return (
     <Section title="Dostęp handlowców">
       <p className="mb-2 text-xs text-slate-500">
-        Opiekun (<b>{client.ownerName ?? 'brak'}</b>) ma zawsze pełną edycję, a kierownicy i administratorzy widzą wszystkich klientów.
-        Ustawienie tutaj ma pierwszeństwo przed dostępem z tagów.
+        Domyślnie klienta widzi i edytuje tylko opiekun. Kierownicy i administratorzy widzą wszystkich klientów.
       </p>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         {sales.map((u) => {
-          const explicit = rules.get(u.id);
-          const tag = fromTags(u.id);
-          const effective = explicit ?? tag.level;
+          const isOwner = u.id === client.ownerId;
+          const defaultLevel: AccessLevel = isOwner ? 'edit' : 'none';
+          const level = rules.get(u.id) ?? defaultLevel;
           return (
             <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
               <Avatar name={u.fullName} size={24} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">{u.fullName}</div>
                 <div className="text-xs text-slate-400">
-                  {explicit
-                    ? <>ustawione ręcznie · <button onClick={() => set(u.id, null)} className="text-brand-600 hover:underline">wg tagów</button></>
-                    : tag.tags.length ? `z tagu ${tag.tags.map((n) => `#${n}`).join(', ')}` : 'domyślnie'}
+                  {isOwner ? 'opiekun' : level !== 'none' ? 'dostęp nadany' : 'bez dostępu'}
+                  {isOwner && level !== defaultLevel && <span className="text-amber-600"> · ograniczony dostęp</span>}
                 </div>
               </div>
               <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
-                {LEVELS.map(({ level, label }) => (
-                  <button key={level} onClick={() => set(u.id, level)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${effective === level
-                      ? `${level === 'none' ? 'bg-white text-slate-700' : level === 'view' ? 'bg-amber-500 text-white' : 'bg-brand-600 text-white'} shadow-sm ${explicit ? '' : 'opacity-70'}`
-                      : 'text-slate-500 hover:text-slate-800'}`}>
-                    {label}
+                {LEVELS.map((l) => (
+                  <button key={l.level} onClick={() => level !== l.level && set(u.id, l.level)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${level === l.level ? `${l.active} shadow-sm` : 'text-slate-500 hover:text-slate-800'}`}>
+                    {l.label}
                   </button>
                 ))}
               </div>
             </div>
           );
         })}
-        {sales.length === 0 && <p className="flex items-center gap-1.5 px-3 py-3 text-sm text-slate-400"><Eye size={14} /> Brak innych handlowców.</p>}
+        {sales.length === 0 && <p className="flex items-center gap-1.5 px-3 py-3 text-sm text-slate-400"><Eye size={14} /> Brak handlowców.</p>}
       </div>
+      <ErrorText error={error} />
     </Section>
   );
 }

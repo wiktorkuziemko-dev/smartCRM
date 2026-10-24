@@ -5,11 +5,11 @@ import { seesAllClients, type SessionUser } from './auth.js';
 import type { AccessLevel } from '../db/schema.js';
 
 /**
- * Zasady dostępu handlowca do klienta:
- * 1. Opiekun klienta ma zawsze pełną edycję.
- * 2. Jeśli admin ustawił dostęp do tego klienta (client_access) – obowiązuje on (brak / podgląd / edycja).
- * 3. W przeciwnym razie decydują tagi klienta (tag_access) – najwyższy z poziomów.
- * Kierownik i admin mają pełny dostęp do wszystkich klientów.
+ * Zasady dostępu handlowca do klienta (jedyne miejsce zarządzania: karta klienta, admin lub kierownik):
+ * 1. Jeśli admin/kierownik ustawił dostęp tego handlowca do klienta (client_access) – obowiązuje on
+ *    (brak / podgląd / edycja), także dla opiekuna.
+ * 2. W przeciwnym razie opiekun ma pełną edycję, a pozostali handlowcy nie widzą klienta.
+ * Kierownik i admin mają pełny dostęp do wszystkich klientów. Tagi nie wpływają na dostęp.
  */
 function directRule(userId: number, levels?: AccessLevel[]) {
   return exists(db.select().from(schema.clientAccess).where(and(
@@ -19,21 +19,10 @@ function directRule(userId: number, levels?: AccessLevel[]) {
   )));
 }
 
-function tagRule(userId: number, levels: AccessLevel[]) {
-  return exists(db.select().from(schema.clientTags)
-    .innerJoin(schema.tagAccess, eq(schema.tagAccess.tagId, schema.clientTags.tagId))
-    .where(and(
-      eq(schema.clientTags.clientId, schema.clients.id),
-      eq(schema.tagAccess.userId, userId),
-      inArray(schema.tagAccess.level, levels),
-    )));
-}
-
 function accessCondition(user: SessionUser, levels: AccessLevel[]): SQL {
   return or(
-    eq(schema.clients.ownerId, user.id),
     directRule(user.id, levels),
-    and(not(directRule(user.id)), tagRule(user.id, levels)),
+    and(not(directRule(user.id)), eq(schema.clients.ownerId, user.id)),
   )!;
 }
 

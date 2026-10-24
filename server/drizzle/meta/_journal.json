@@ -50,6 +50,20 @@
       "when": 1792827444808,
       "tag": "0006_user_settings_google_sa",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792838363464,
+      "tag": "0007_simple_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792838364272,
+      "tag": "0008_login_events",
+      "breakpoints": true
     }
   ]
 }

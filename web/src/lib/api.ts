@@ -10,10 +10,7 @@ export interface UserRow {
   login?: string; email?: string | null; googleConnected?: boolean;
 }
 export type AccessLevel = 'none' | 'view' | 'edit';
-export interface Tag {
-  id: number; name: string; color: string; position: number;
-  access?: { userId: number; level: 'view' | 'edit' }[]; // tylko dla admina
-}
+export interface Tag { id: number; name: string; color: string; position: number }
 export interface Status { id: number; name: string; color: string; position: number; active: boolean }
 export type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox';
 export interface CustomField {
@@ -41,7 +38,7 @@ export interface ClientRow extends Client {
 }
 export interface ClientDetail extends Client {
   contacts: Contact[];
-  accessRules?: { userId: number; level: AccessLevel }[]; // tylko dla admina
+  accessRules?: { userId: number; level: AccessLevel }[]; // tylko dla admina i kierownika
 }
 export type TaskType = 'task' | 'call' | 'meeting' | 'email';
 export type ActivityType = 'comment' | 'call' | 'meeting' | 'email' | 'status_change' | 'system';

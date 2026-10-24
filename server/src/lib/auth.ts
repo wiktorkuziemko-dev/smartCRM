@@ -46,13 +46,40 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
       email: schema.users.email,
       role: schema.users.role,
       active: schema.users.active,
+      lastSeenAt: schema.users.lastSeenAt,
     })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.users.id, schema.sessions.userId))
     .where(and(eq(schema.sessions.id, id), gt(schema.sessions.expiresAt, new Date())));
   if (!row || !row.active) return reply.code(401).send({ error: 'Sesja wygasła' });
-  const { active: _, ...user } = row;
+  const { active: _, lastSeenAt, ...user } = row;
   req.user = user;
+  void trackActivity(user.id, lastSeenAt);
+}
+
+const VISIT_GAP_MS = 30 * 60_000;
+
+/**
+ * Aktywność do statystyk: zapis "wejścia" (login_events) przy logowaniu i przy powrocie
+ * po co najmniej 30 minutach przerwy; last_seen_at aktualizowane najwyżej raz na minutę.
+ */
+// Ostatnio zarejestrowana aktywność w pamięci – równoległe zapytania przy otwarciu strony
+// nie mogą zapisać kilku "wejść" (sprawdzenie i zapis do mapy są synchroniczne).
+const lastSeenCache = new Map<number, number>();
+
+export async function trackActivity(userId: number, lastSeenAt: Date | null, isLogin = false) {
+  const now = Date.now();
+  const last = Math.max(lastSeenAt?.getTime() ?? 0, lastSeenCache.get(userId) ?? 0);
+  if (!isLogin && now - last < 60_000) return;
+  lastSeenCache.set(userId, now);
+  try {
+    if (isLogin || now - last >= VISIT_GAP_MS) await db.insert(schema.loginEvents).values({ userId });
+    if (isLogin || now - last >= 60_000) {
+      await db.update(schema.users).set({ lastSeenAt: new Date(now) }).where(eq(schema.users.id, userId));
+    }
+  } catch (err) {
+    console.error('Nie udało się zapisać aktywności użytkownika', err);
+  }
 }
 
 /** preHandler: wymaga jednej z ról (używać po requireAuth). */

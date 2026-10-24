@@ -193,7 +193,7 @@ export async function clientRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.contacts.isPrimary), asc(schema.contacts.id));
     const tagIds = (await tagIdsByClient([client.id])).get(client.id) ?? [];
     // Dostęp ustawiony przez admina dla poszczególnych handlowców – widoczny tylko dla admina.
-    const accessRules = req.user.role === 'ADMIN'
+    const accessRules = seesAllClients(req.user)
       ? (await db.select({ userId: schema.clientAccess.userId, level: schema.clientAccess.level })
         .from(schema.clientAccess).where(eq(schema.clientAccess.clientId, client.id)))
       : undefined;
@@ -208,6 +208,7 @@ export async function clientRoutes(app: FastifyInstance) {
     const [client] = await db.insert(schema.clients).values({
       ...data,
       ownerId: resolveOwner(req.user, ownerId, null),
+      createdById: req.user.id,
       custom: await sanitizeCustom(custom),
     }).returning();
     if (contact?.name) {
@@ -241,6 +242,11 @@ export async function clientRoutes(app: FastifyInstance) {
         `Zmiana statusu: ${await statusName(client.statusId)} → ${await statusName(data.statusId)}`);
     }
     if (newOwner !== client.ownerId) {
+      // Nowy opiekun dostaje domyślną pełną edycję (kasujemy jego wcześniejsze ograniczenie).
+      if (newOwner) {
+        await db.delete(schema.clientAccess)
+          .where(and(eq(schema.clientAccess.clientId, client.id), eq(schema.clientAccess.userId, newOwner)));
+      }
       await logActivity(client.id, req.user.id, 'system',
         `Zmiana opiekuna: ${await userName(client.ownerId)} → ${await userName(newOwner)}`);
     }
@@ -248,22 +254,30 @@ export async function clientRoutes(app: FastifyInstance) {
   });
 
   /**
-   * Admin ustawia dostęp handlowca do klienta: 'none' | 'view' | 'edit'.
-   * null usuwa ustawienie – wtedy o dostępie decydują tagi klienta.
+   * Admin lub kierownik ustawia dostęp handlowca do klienta: 'none' | 'view' | 'edit'.
+   * Zapisujemy tylko odstępstwa od zasady domyślnej (opiekun – edycja, pozostali – brak).
    */
-  app.put('/api/clients/:id/access/:userId', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+  app.put('/api/clients/:id/access/:userId', { preHandler: requireRole('ADMIN', 'MANAGER') }, async (req, reply) => {
     const params = parse(z.object({ id: z.coerce.number().int(), userId: z.coerce.number().int() }), req.params, reply);
-    const body = parse(z.object({ level: z.enum(['none', 'view', 'edit']).nullable() }), req.body, reply);
+    const body = parse(z.object({ level: z.enum(['none', 'view', 'edit']) }), req.body, reply);
     if (!params || !body) return;
-    const client = await loadClientFor(req.user, params.id, reply);
+    const client = await loadClientFor(req.user, params.id, reply, 'edit');
     if (!client) return;
-    if (params.userId === client.ownerId) return reply.code(400).send({ error: 'Opiekun klienta ma zawsze pełny dostęp' });
-    const where = and(eq(schema.clientAccess.clientId, client.id), eq(schema.clientAccess.userId, params.userId));
-    if (body.level === null) {
+    const [target] = await db.select().from(schema.users).where(eq(schema.users.id, params.userId));
+    if (!target || target.role !== 'SALES') return reply.code(400).send({ error: 'Dostęp ustawia się tylko handlowcom' });
+
+    const defaultLevel = target.id === client.ownerId ? 'edit' : 'none';
+    const where = and(eq(schema.clientAccess.clientId, client.id), eq(schema.clientAccess.userId, target.id));
+    const [previous] = await db.select().from(schema.clientAccess).where(where);
+    if (body.level === defaultLevel) {
       await db.delete(schema.clientAccess).where(where);
     } else {
-      await db.insert(schema.clientAccess).values({ clientId: client.id, userId: params.userId, level: body.level })
+      await db.insert(schema.clientAccess).values({ clientId: client.id, userId: target.id, level: body.level })
         .onConflictDoUpdate({ target: [schema.clientAccess.clientId, schema.clientAccess.userId], set: { level: body.level } });
+    }
+    if ((previous?.level ?? defaultLevel) !== body.level) {
+      const labels = { none: 'brak dostępu', view: 'tylko podgląd', edit: 'pełna edycja' };
+      await logActivity(client.id, req.user.id, 'system', `Dostęp: ${target.fullName} – ${labels[body.level]}`);
     }
     return { ok: true };
   });

@@ -4,11 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, CalendarCheck, Package, Users } from 'lucide-react';
 import { api, type Dashboard, type Task } from '../lib/api';
 import { fmtAgo, fmtNumber } from '../lib/format';
-import { useMe, useStatuses, useTasks } from '../lib/queries';
+import { seesAll, useMe, useStatuses, useTasks } from '../lib/queries';
 import { TaskForm } from '../components/TaskForm';
 import { TaskItem } from '../components/TaskItem';
 import { Empty } from '../components/ui';
 import { groupTasks } from '../lib/tasks';
+import { TeamActivity } from '../components/TeamActivity';
 
 export function DashboardPage() {
   const { data: me } = useMe();
@@ -36,7 +37,9 @@ export function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       <h1 className="text-2xl font-semibold">{hour < 18 ? 'Dzień dobry' : 'Dobry wieczór'}, {me?.fullName.split(' ')[0]} 👋</h1>
-      <p className="mb-6 text-sm text-slate-500">Oto podsumowanie Twojej sprzedaży.</p>
+      <p className="mb-6 text-sm text-slate-500">{seesAll(me) ? 'Oto podsumowanie pracy zespołu.' : 'Oto podsumowanie Twojej sprzedaży.'}</p>
+
+      {seesAll(me) && <TeamActivity />}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map(({ label, value, icon: Icon, tone }) => (

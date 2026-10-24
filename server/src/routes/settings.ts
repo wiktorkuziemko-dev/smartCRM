@@ -72,32 +72,14 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // --- Tagi klientów ---
-  // Wszyscy widzą listę tagów; admin dodatkowo widzi, którzy handlowcy mają dostęp do klientów z tagiem.
-  app.get('/api/tags', async (req) => {
-    const tags = await db.select().from(schema.tags).orderBy(asc(schema.tags.position), asc(schema.tags.id));
-    if (req.user.role !== 'ADMIN') return tags;
-    const access = await db.select().from(schema.tagAccess);
-    return tags.map((t) => ({
-      ...t,
-      access: access.filter((a) => a.tagId === t.id).map(({ userId, level }) => ({ userId, level })),
-    }));
-  });
+  // --- Tagi klientów (wyłącznie informacyjne – nie wpływają na dostęp) ---
+  app.get('/api/tags', async () =>
+    db.select().from(schema.tags).orderBy(asc(schema.tags.position), asc(schema.tags.id)));
 
   const tagBody = z.object({
     name: z.string().trim().toLowerCase().min(1).max(64),
     color,
-    // Handlowcy z dostępem do klientów z tym tagiem: podgląd lub pełna edycja.
-    access: z.array(z.object({ userId: z.number().int(), level: z.enum(['view', 'edit']) })).max(200).default([]),
   });
-
-  async function setTagAccess(tagId: number, access: { userId: number; level: 'view' | 'edit' }[]) {
-    const unique = [...new Map(access.map((a) => [a.userId, a])).values()];
-    await db.transaction(async (tx) => {
-      await tx.delete(schema.tagAccess).where(eq(schema.tagAccess.tagId, tagId));
-      if (unique.length) await tx.insert(schema.tagAccess).values(unique.map((a) => ({ tagId, ...a })));
-    });
-  }
 
   app.post('/api/tags', adminOnly, async (req, reply) => {
     const body = parse(tagBody, req.body, reply);
@@ -105,8 +87,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const [exists] = await db.select().from(schema.tags).where(eq(schema.tags.name, body.name));
     if (exists) return reply.code(409).send({ error: 'Taki tag już istnieje' });
     const [{ max }] = await db.select({ max: sql<number>`coalesce(max(${schema.tags.position}), -1)` }).from(schema.tags);
-    const [row] = await db.insert(schema.tags).values({ name: body.name, color: body.color, position: Number(max) + 1 }).returning();
-    await setTagAccess(row.id, body.access);
+    const [row] = await db.insert(schema.tags).values({ ...body, position: Number(max) + 1 }).returning();
     return row;
   });
 
@@ -114,13 +95,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     const params = parse(idParam, req.params, reply);
     const body = parse(tagBody.partial(), req.body, reply);
     if (!params || !body) return;
-    const { access, ...data } = body;
-    if (data.name) {
-      const [dup] = await db.select().from(schema.tags).where(eq(schema.tags.name, data.name));
+    if (body.name) {
+      const [dup] = await db.select().from(schema.tags).where(eq(schema.tags.name, body.name));
       if (dup && dup.id !== params.id) return reply.code(409).send({ error: 'Taki tag już istnieje' });
     }
-    if (Object.keys(data).length) await db.update(schema.tags).set(data).where(eq(schema.tags.id, params.id));
-    if (access) await setTagAccess(params.id, access);
+    if (Object.keys(body).length) await db.update(schema.tags).set(body).where(eq(schema.tags.id, params.id));
     return { ok: true };
   });
 

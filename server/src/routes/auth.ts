@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
-import { createSession, destroySession, requireAuth } from '../lib/auth.js';
+import { createSession, destroySession, requireAuth, trackActivity } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
 import { getServiceAccount } from '../lib/google.js';
 
@@ -16,6 +16,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: 'Nieprawidłowy login lub hasło' });
     }
     await createSession(reply, user.id);
+    await trackActivity(user.id, user.lastSeenAt, true);
     return { ok: true };
   });
 
