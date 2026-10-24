@@ -64,12 +64,14 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
   const { data: me } = useMe();
   const qc = useQueryClient();
   const meta = TYPE_META[a.type];
+  // Autor spoza listy użytkowników (np. „Poprzedni opiekun” z importu).
+  const author = a.authorName ?? a.authorLabel;
 
   if (a.type === 'status_change' || a.type === 'system') {
     return (
       <div className="flex items-center gap-2 pl-1 text-xs text-slate-500">
         <span className={`flex h-6 w-6 items-center justify-center rounded-full ${meta.tone}`}><meta.icon size={12} /></span>
-        <span><b className="font-medium text-slate-600">{a.authorName ?? 'System'}</b> · {a.content}</span>
+        <span><b className="font-medium text-slate-600">{author ?? 'System'}</b> · {a.content}</span>
         <span className="text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtAgo(a.createdAt)}</span>
       </div>
     );
@@ -94,10 +96,11 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
 
   return (
     <div className="group flex gap-3">
-      <Avatar name={a.authorName} size={32} />
+      <Avatar name={author} size={32} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 text-sm">
-          <span className="font-medium">{a.authorName ?? 'Użytkownik usunięty'}</span>
+          <span className={`font-medium ${a.authorName ? '' : 'text-slate-500'}`}>{author ?? 'Użytkownik usunięty'}</span>
+          {a.source === 'asana' && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500" title="Wpis zaimportowany z Asany">z Asany</span>}
           {a.type !== 'comment' && (
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${meta.tone}`}><meta.icon size={11} />{meta.label}</span>
           )}

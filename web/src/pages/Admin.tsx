@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { purgeClient, restoreClient } from '../lib/archive';
+import { ImportTab } from './ImportTab';
 import { fmtDateTime, fmtNip } from '../lib/format';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,7 +11,7 @@ import { api, type CustomField, type FieldType, type Role, type Status, type Tag
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Import'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
@@ -34,6 +35,7 @@ export function AdminPage() {
       {tab === 'Pola klienta' && <FieldsTab />}
       {tab === 'Archiwum' && <ArchiveTab />}
       {tab === 'Integracje' && <IntegrationsTab />}
+      {tab === 'Import' && <ImportTab />}
     </div>
   );
 }

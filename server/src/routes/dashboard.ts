@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { config } from '../config.js';
@@ -22,7 +22,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       createdAt: schema.activities.createdAt,
       clientId: schema.clients.id,
       clientName: schema.clients.name,
-      authorName: schema.users.fullName,
+      authorName: sql<string | null>`coalesce(${schema.users.fullName}, ${schema.activities.authorLabel})`,
     }).from(schema.activities)
       .innerJoin(schema.clients, eq(schema.clients.id, schema.activities.clientId))
       .leftJoin(schema.users, eq(schema.users.id, schema.activities.authorId))
@@ -75,7 +75,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       with b as (select (date_trunc('day', now() at time zone ${tz}) at time zone ${tz}) as t0),
       d as (select generate_series(t0 - interval '13 days', t0, interval '1 day') as s from b)
       select to_char(d.s at time zone ${tz}, 'YYYY-MM-DD') as day,
-        (select count(*) from activities a where a.author_id = ${me.id} and a.type in ('meeting', 'call', 'email', 'comment')
+        (select count(*) from activities a where a.author_id = ${me.id} and a.source is null and a.type in ('meeting', 'call', 'email', 'comment')
            and a.created_at >= d.s and a.created_at < d.s + interval '1 day')::int
         + (select count(*) from clients c where c.created_by_id = ${me.id}
            and c.created_at >= d.s and c.created_at < d.s + interval '1 day')::int as actions,
@@ -95,7 +95,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     }).from(schema.activities)
       .innerJoin(schema.clients, eq(schema.clients.id, schema.activities.clientId))
       .leftJoin(schema.tasks, eq(schema.tasks.id, schema.activities.taskId))
-      .where(and(eq(schema.activities.authorId, me.id), inArray(schema.activities.type, ['comment', 'call', 'meeting', 'email']), visible))
+      .where(and(eq(schema.activities.authorId, me.id), isNull(schema.activities.source), inArray(schema.activities.type, ['comment', 'call', 'meeting', 'email']), visible))
       .orderBy(desc(schema.activities.createdAt))
       .limit(8);
 
@@ -137,7 +137,7 @@ async function activityByPeriod(userId?: number): Promise<ActivityRow[]> {
              count(*) filter (where a.type = 'call')::int as calls,
              count(*) filter (where a.type = 'email')::int as emails,
              count(*) filter (where a.type = 'comment')::int as comments
-      from activities a where a.author_id = u.id and a.created_at >= p.s and a.created_at < p.e
+      from activities a where a.author_id = u.id and a.source is null and a.created_at >= p.s and a.created_at < p.e
     ) act on true
     where ${who}
     order by u.full_name

@@ -79,6 +79,8 @@ export const clients = pgTable('clients', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: integer('archived_by_id').references(() => users.id, { onDelete: 'set null' }),
   createdById: integer('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+  // Identyfikator w systemie źródłowym przy imporcie, np. "asana:1212473601512478" (chroni przed duplikatami).
+  externalId: varchar('external_id', { length: 64 }).unique(),
 }, (t) => [index('clients_owner_idx').on(t.ownerId)]);
 
 export const contacts = pgTable('contacts', {
@@ -98,6 +100,11 @@ export const activities = pgTable('activities', {
   authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
   type: activityTypeEnum('type').notNull().default('comment'),
   content: text('content').notNull().default(''),
+  // Autor spoza listy użytkowników (np. "Poprzedni opiekun" przy imporcie) – gdy author_id jest pusty.
+  authorLabel: varchar('author_label', { length: 128 }),
+  // Źródło wpisu, np. "asana" – wpisy z importu nie liczą się do statystyk aktywności.
+  source: varchar('source', { length: 16 }),
+  externalId: varchar('external_id', { length: 64 }).unique(),
   // Zaplanowany telefon/spotkanie/e-mail: wpis w historii powiązany z zadaniem.
   taskId: integer('task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
