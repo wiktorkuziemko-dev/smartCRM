@@ -63,13 +63,41 @@ async function call<T>(cfg: EServerConfig, fn: string, params: Record<string, st
       method: 'POST', body, headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' }, signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
-    throw new Error(`Brak połączenia z E-SERVER (${(err as Error).message}). Sprawdź adres URL i dostęp serwera do internetu.`);
+    throw new Error(connectionError(err, cfg.baseUrl));
   }
   if (res.status === 403 || res.status === 401) {
     throw new Error('E-SERVER odmówił dostępu (403): nieprawidłowy login lub hasło albo dostęp do API nie jest aktywny na koncie.');
   }
   if (!res.ok) throw new Error(`E-SERVER zwrócił błąd ${res.status} dla funkcji ${fn}`);
   try { return (await res.json()) as T; } catch { throw new Error(`E-SERVER zwrócił niepoprawne dane dla funkcji ${fn}`); }
+}
+
+/** Zamienia błąd sieci/TLS z fetch (przyczyna w err.cause) na zrozumiały komunikat z kodem błędu. */
+export function connectionError(err: unknown, url: string) {
+  const e = err as Error & { cause?: { code?: string; message?: string } };
+  const code = e.cause?.code ?? (e.name === 'TimeoutError' || e.name === 'AbortError' ? 'TIMEOUT' : '');
+  let host = url;
+  try { host = new URL(url).host; } catch { /* zostaje pełny adres */ }
+  const hints: Record<string, string> = {
+    ENOTFOUND: `serwer aplikacji nie może odnaleźć adresu ${host} (DNS). Sprawdź adres URL oraz dostęp kontenera Docker do internetu i DNS.`,
+    EAI_AGAIN: `chwilowy błąd DNS przy szukaniu ${host}. Spróbuj ponownie; jeśli się powtarza – sprawdź DNS i dostęp do internetu.`,
+    ECONNREFUSED: `${host} odrzucił połączenie. Sprawdź adres URL (powinien zaczynać się od https://).`,
+    ECONNRESET: `połączenie z ${host} zostało przerwane – często przez zaporę, proxy lub VPN.`,
+    ETIMEDOUT: `${host} nie odpowiada – połączenie blokuje prawdopodobnie zapora, proxy lub VPN.`,
+    UND_ERR_CONNECT_TIMEOUT: `${host} nie odpowiada – połączenie blokuje prawdopodobnie zapora, proxy lub VPN.`,
+    TIMEOUT: `${host} nie odpowiedział w ciągu 30 s.`,
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'nie można zweryfikować certyfikatu SSL serwera (niepełny łańcuch certyfikatów lub ruch HTTPS przechwytuje antywirus/zapora firmowa).',
+    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'certyfikat SSL wystawił nieznany urząd certyfikacji – najczęściej antywirus lub zapora firmowa skanuje ruch HTTPS.',
+    SELF_SIGNED_CERT_IN_CHAIN: 'w łańcuchu certyfikatów jest certyfikat własny – najczęściej antywirus lub zapora firmowa skanuje ruch HTTPS.',
+    DEPTH_ZERO_SELF_SIGNED_CERT: 'serwer przedstawił certyfikat SSL z podpisem własnym.',
+    CERT_HAS_EXPIRED: 'certyfikat SSL serwera wygasł (lub zegar komputera jest źle ustawiony).',
+    ERR_TLS_CERT_ALTNAME_INVALID: `certyfikat SSL nie pasuje do adresu ${host}.`,
+    ERR_SSL_WRONG_VERSION_NUMBER: 'niezgodność protokołu – sprawdź, czy adres zaczyna się od https:// i czy port jest właściwy.',
+  };
+  const hint = hints[code] ?? (code.startsWith('ERR_SSL') || code === 'EPROTO'
+    ? 'nie udało się zestawić szyfrowanego połączenia (TLS).'
+    : 'sprawdź adres URL i dostęp serwera aplikacji do internetu.');
+  return `Brak połączenia z E-SERVER: ${hint}${code ? ` [kod: ${code}]` : ''}${e.cause?.message && !code ? ` (${e.cause.message})` : ''}`;
 }
 
 export async function fetchDevices(cfg: EServerConfig, fresh = false): Promise<Device[]> {
