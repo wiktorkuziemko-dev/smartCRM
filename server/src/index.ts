@@ -17,6 +17,7 @@ import { googleRoutes } from './routes/google.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { importRoutes } from './routes/import.js';
 import { gpsRoutes } from './routes/gps.js';
+import { reportRoutes } from './routes/reports.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
@@ -24,7 +25,7 @@ await app.register(cookie);
 await app.register(multipart, { limits: { fileSize: config.maxUploadMb * 1024 * 1024, files: 10 } });
 
 app.get('/api/health', async () => ({ ok: true }));
-for (const routes of [authRoutes, userRoutes, settingsRoutes, clientRoutes, activityRoutes, taskRoutes, googleRoutes, dashboardRoutes, importRoutes, gpsRoutes]) {
+for (const routes of [authRoutes, userRoutes, settingsRoutes, clientRoutes, activityRoutes, taskRoutes, googleRoutes, dashboardRoutes, importRoutes, gpsRoutes, reportRoutes]) {
   await app.register(routes);
 }
 
