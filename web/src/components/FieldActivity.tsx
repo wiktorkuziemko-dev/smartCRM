@@ -25,11 +25,18 @@ const STATES: Record<VehicleState, { label: string; color: string }> = {
   driving: { label: 'W trasie', color: '#16a34a' },
   idle: { label: 'Postój, stacyjka włączona', color: '#d97706' },
   parked: { label: 'Zaparkowany', color: '#2563eb' },
-  stale: { label: 'Brak danych > 2 h', color: '#94a3b8' },
+  stale: { label: 'Brak danych > 12 h', color: '#94a3b8' },
 };
 
+// Nadajniki na postoju raportują co 12 h: dopiero brak raportu dłużej niż 12 h to „brak danych”.
+// Krótsza przerwa w raportach (ponad 30 min) oznacza postój – nawet jeśli ostatni raport był z jazdy.
+const STALE_MS = 12 * 3600e3;
+const LIVE_MS = 30 * 60e3;
+
 function stateOf(p: Position): VehicleState {
-  if (!p.at || Date.now() - new Date(p.at).getTime() > 2 * 3600e3) return 'stale';
+  const age = p.at ? Date.now() - new Date(p.at).getTime() : Infinity;
+  if (age > STALE_MS) return 'stale';
+  if (age > LIVE_MS) return 'parked';
   if (p.ignition === 'ON' && p.speed > 0) return 'driving';
   if (p.ignition === 'ON') return 'idle';
   return 'parked';
@@ -201,6 +208,8 @@ function VehicleMap({ rows, focus }: { rows: Row[]; focus: number | null }) {
         className: '',
         iconSize: r.avatarUrl ? [44, 44] : [34, 34],
         iconAnchor: r.avatarUrl ? [22, 22] : [17, 17],
+        // Dymek nad ikoną, a nie na niej.
+        popupAnchor: r.avatarUrl ? [0, -26] : [0, -21],
         // Ze zdjęciem: kolor stanu pojazdu jako obwódka; bez zdjęcia – inicjały na kolorowym tle.
         html: r.avatarUrl
           ? `<div style="width:44px;height:44px;border-radius:9999px;border:3px solid ${STATES[st].color};background:#fff;box-shadow:0 2px 6px rgba(15,23,42,.35);overflow:hidden"><img src="${r.avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;border:2px solid #fff;box-sizing:border-box"></div>`
