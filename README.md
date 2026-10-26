@@ -97,6 +97,12 @@ powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\przywroc.ps1 -K
 
 Plik `.env` w kopii zawiera hasła, więc kopie przechowuj w bezpiecznym miejscu. Trzymaj też co najmniej jedną kopię poza komputerem z aplikacją (dysk sieciowy, dysk zewnętrzny).
 
+## Serwer z Linuksem (maszyna wirtualna)
+
+Na Linuksie (Ubuntu + Docker Engine) do kopii, odtwarzania i aktualizacji służą `backup.sh`, `przywroc.sh`
+i `aktualizuj.sh` (aktualizacja przez `git`, z automatyczną kopią przed zmianą i powrotem do poprzedniej
+wersji przy błędzie). Pełna instrukcja przeniesienia z Docker Desktop i utrzymania: **[MIGRACJA.md](MIGRACJA.md)**.
+
 ## Integracja z Kalendarzem Google (opcjonalnie)
 
 Zadania użytkowników (telefony, spotkania, e-maile) mogą same trafiać do ich Kalendarzy Google, z przypomnieniem 15 minut przed terminem. Wydarzenie aktualizuje się przy każdej zmianie zadania i znika, gdy zadanie jest wykonane lub usunięte. Aplikacja korzysta z jednego **konta usługi Google**, więc działa w sieci lokalnej, bez domeny i bez logowania użytkowników do Google.

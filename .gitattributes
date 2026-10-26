@@ -1,0 +1,2 @@
+# Skrypty dla Linuksa muszą mieć końce linii LF, także po edycji na Windows.
+*.sh text eol=lf
