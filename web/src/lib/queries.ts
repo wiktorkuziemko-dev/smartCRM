@@ -35,5 +35,15 @@ export const clientColumnsOf = (me?: Me) => {
   return cols.includes('name') ? cols : ['name', ...cols];
 };
 
+export interface NavLabels { dashboard: string; clients: string; tasks: string; reports: string; settings: string; admin: string }
+export const NAV_DEFAULTS: NavLabels = {
+  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', settings: 'Ustawienia', admin: 'Administracja',
+};
+/** Nazwy zakładek menu ustawione przez admina (do czasu wczytania – domyślne). */
+export const useNavLabels = (enabled = true): NavLabels => {
+  const { data } = useQuery({ queryKey: ['nav-labels'], queryFn: () => api.get<NavLabels>('/api/nav-labels'), staleTime: 5 * 60_000, enabled });
+  return data ?? NAV_DEFAULTS;
+};
+
 export const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrator', MANAGER: 'Kierownik', SALES: 'Handlowiec' };
 export const seesAll = (me?: Me) => me?.role === 'ADMIN' || me?.role === 'MANAGER';

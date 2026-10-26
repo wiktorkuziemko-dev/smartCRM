@@ -9,23 +9,24 @@ import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, ArrowDown, ArrowUp, CalendarDays, Check, Eye, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type ArchivedClient } from '../lib/api';
-import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
+import { NAV_DEFAULTS, ROLE_LABELS, useFields, useMe, useNavLabels, useStatuses, useTags, useUsers, type NavLabels } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 import { AvatarUpload } from '../components/AvatarUpload';
 import { LogsTab } from './LogsTab';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import', 'Logi'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import', 'Nazwy zakładek', 'Logi'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
   // ?tab=eserver – bezpośredni link z pulpitu do ustawień integracji GPS.
   const [params] = useSearchParams();
   const [tab, setTab] = useState<(typeof TABS)[number]>(params.get('tab') === 'eserver' ? 'Integracja E-SERVER' : 'Użytkownicy');
+  const labels = useNavLabels();
   if (me && me.role !== 'ADMIN') return <Navigate to="/" replace />;
 
   return (
     <div className={`mx-auto px-4 py-6 sm:px-6 ${tab === 'Logi' ? 'max-w-7xl' : 'max-w-5xl'}`}>
-      <h1 className="mb-4 text-2xl font-semibold">Administracja</h1>
+      <h1 className="mb-4 text-2xl font-semibold">{labels.admin}</h1>
       <div className="mb-5 flex flex-wrap gap-x-1 border-b border-slate-200">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
@@ -42,6 +43,7 @@ export function AdminPage() {
       {tab === 'Integracje' && <IntegrationsTab />}
       {tab === 'Integracja E-SERVER' && <EServerTab />}
       {tab === 'Import' && <ImportTab />}
+      {tab === 'Nazwy zakładek' && <NavLabelsTab />}
       {tab === 'Logi' && <LogsTab />}
     </div>
   );
@@ -489,5 +491,57 @@ function IntegrationsTab() {
         )}
       </section>
     </div>
+  );
+}
+
+const NAV_FIELDS: { key: keyof NavLabels; hint: string }[] = [
+  { key: 'dashboard', hint: 'strona startowa' },
+  { key: 'clients', hint: 'lista klientów' },
+  { key: 'tasks', hint: 'zadania zalogowanej osoby' },
+  { key: 'reports', hint: 'widoczna dla kierownika i admina' },
+  { key: 'settings', hint: 'ustawienia osobiste' },
+  { key: 'admin', hint: 'widoczna tylko dla admina' },
+];
+
+/** Administracja → Nazwy zakładek: nazwy pozycji menu widoczne dla wszystkich użytkowników. */
+function NavLabelsTab() {
+  const qc = useQueryClient();
+  const labels = useNavLabels();
+  const [form, setForm] = useState<NavLabels | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [saved, setSaved] = useState(false);
+  const f = form ?? labels;
+
+  async function save(values: NavLabels) {
+    setError(null); setSaved(false);
+    try {
+      const res = await api.put<NavLabels>('/api/admin/nav-labels', values);
+      qc.setQueryData(['nav-labels'], res);
+      setForm(null); setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) { setError(err); }
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-1 font-semibold">Nazwy zakładek w menu</h2>
+      <p className="mb-4 text-sm text-slate-500">
+        Nazwy widzą wszyscy użytkownicy – w menu po lewej i w nagłówkach stron. Puste pole przywraca nazwę domyślną.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {NAV_FIELDS.map(({ key, hint }) => (
+          <Field key={key} label={`${NAV_DEFAULTS[key]} (${hint})`}>
+            <input className="input" value={f[key]} maxLength={40} placeholder={NAV_DEFAULTS[key]}
+              onChange={(e) => setForm({ ...f, [key]: e.target.value })} />
+          </Field>
+        ))}
+      </div>
+      <div className="mt-2"><ErrorText error={error} /></div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button onClick={() => save(f)} disabled={!form}>Zapisz</Button>
+        <Button variant="ghost" onClick={() => save(NAV_DEFAULTS)}>Przywróć domyślne</Button>
+        {saved && <span className="text-sm text-emerald-600">Zapisano</span>}
+      </div>
+    </section>
   );
 }

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Activity, CheckSquare, Eye, Mail, MessageSquare, Package, Phone, Plus, UserPlus, Users, LogIn, Share2, Briefcase } from 'lucide-react';
 import { api, type ActivityType, type Task } from '../lib/api';
 import { fmtAgo, fmtNumber } from '../lib/format';
-import { useMe, useStatuses, useTasks } from '../lib/queries';
+import { useMe, useNavLabels, useStatuses, useTasks } from '../lib/queries';
 import { groupTasks } from '../lib/tasks';
 import { TaskForm } from './TaskForm';
 import { TaskItem } from './TaskItem';
@@ -79,6 +79,7 @@ function Tile({ icon: Icon, tone, value, label, hint }: { icon: typeof Phone; to
 
 /** Duże okno zadań: zaległe, dziś, najbliższe 7 dni. */
 function TasksPanel() {
+  const labels = useNavLabels();
   const { data: me } = useMe();
   const { data: tasks = [] } = useTasks({ assigneeId: me?.id, status: 'open' });
   const [form, setForm] = useState<{ task?: Task } | null>(null);
@@ -92,7 +93,7 @@ function TasksPanel() {
   return (
     <section className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-3">
       <div className="flex items-center gap-2 px-5 pt-5 pb-3">
-        <h2 className="mr-auto flex items-center gap-2 font-semibold"><CheckSquare size={18} className="text-brand-600" /> Moje zadania</h2>
+        <h2 className="mr-auto flex items-center gap-2 font-semibold"><CheckSquare size={18} className="text-brand-600" /> {labels.tasks}</h2>
         <Link to="/tasks" className="text-sm text-brand-600 hover:underline">Wszystkie</Link>
         <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => setForm({})}><Plus size={14} /> Nowe</Button>
       </div>

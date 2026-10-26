@@ -61,6 +61,7 @@ const ACTIONS: Record<string, ActionDef> = {
   'PUT /api/fields/:id': { category: 'settings', label: 'Edycja pola klienta', entity: 'field' },
   'DELETE /api/fields/:id': { category: 'settings', label: 'Usunięcie pola klienta', entity: 'field' },
   'PUT /api/fields-order': { category: 'settings', label: 'Zmiana kolejności pól klienta' },
+  'PUT /api/admin/nav-labels': { category: 'settings', label: 'Zmiana nazw zakładek menu' },
 
   'PUT /api/admin/google': { category: 'integration', label: 'Konfiguracja Kalendarza Google' },
   'DELETE /api/admin/google': { category: 'integration', label: 'Wyłączenie Kalendarza Google' },

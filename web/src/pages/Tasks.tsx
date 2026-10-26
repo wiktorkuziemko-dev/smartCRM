@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { Task } from '../lib/api';
-import { seesAll, useMe, useTasks, useUsers } from '../lib/queries';
+import { seesAll, useMe, useNavLabels, useTasks, useUsers } from '../lib/queries';
 import { TaskForm } from '../components/TaskForm';
 import { TaskItem } from '../components/TaskItem';
 import { Button, Empty } from '../components/ui';
@@ -9,6 +9,7 @@ import { groupTasks } from '../lib/tasks';
 
 
 export function TasksPage() {
+  const labels = useNavLabels();
   const { data: me } = useMe();
   const { data: users = [] } = useUsers();
   const [assignee, setAssignee] = useState<string>('me');
@@ -24,7 +25,7 @@ export function TasksPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <h1 className="mr-auto text-2xl font-semibold">{assignee === 'me' ? 'Moje zadania' : 'Zadania'}</h1>
+        <h1 className="mr-auto text-2xl font-semibold">{assignee === 'me' ? labels.tasks : 'Zadania'}</h1>
         {seesAll(me) && (
           <select className="input w-auto" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
             <option value="me">Moje</option>

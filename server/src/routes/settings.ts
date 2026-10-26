@@ -21,8 +21,33 @@ function slugify(label: string) {
     .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 50) || 'pole';
 }
 
+// Nazwy zakładek menu – ustawiane przez admina, wspólne dla wszystkich użytkowników.
+export const NAV_DEFAULTS = {
+  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', settings: 'Ustawienia', admin: 'Administracja',
+};
+type NavKey = keyof typeof NAV_DEFAULTS;
+
+async function navLabels() {
+  const [row] = await db.select().from(schema.appSettings).where(eq(schema.appSettings.key, 'navLabels'));
+  const saved = (row?.value ?? {}) as Partial<Record<NavKey, string>>;
+  return Object.fromEntries((Object.keys(NAV_DEFAULTS) as NavKey[]).map((k) => [k, saved[k]?.trim() || NAV_DEFAULTS[k]])) as Record<NavKey, string>;
+}
+
 export async function settingsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth);
+
+  app.get('/api/nav-labels', async () => navLabels());
+
+  /** Puste pole = nazwa domyślna. */
+  app.put('/api/admin/nav-labels', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const label = z.string().trim().max(40, 'Nazwa może mieć najwyżej 40 znaków').optional();
+    const body = parse(z.object(Object.fromEntries(Object.keys(NAV_DEFAULTS).map((k) => [k, label])) as Record<NavKey, typeof label>), req.body, reply);
+    if (!body) return;
+    const value = Object.fromEntries(Object.entries(body).filter(([k, v]) => v && v !== NAV_DEFAULTS[k as NavKey]));
+    await db.insert(schema.appSettings).values({ key: 'navLabels', value })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value } });
+    return navLabels();
+  });
   const adminOnly = { preHandler: requireRole('ADMIN') };
 
   // --- Statusy klienta (lejek) ---

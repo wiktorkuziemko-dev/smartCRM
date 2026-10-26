@@ -6,7 +6,7 @@ import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type Me } from '../lib/api';
-import { clientColumnsOf, useClients, useFields, useMe, useStatuses, useTags, useVoivodeships } from '../lib/queries';
+import { clientColumnsOf, useClients, useFields, useMe, useNavLabels, useStatuses, useTags, useVoivodeships } from '../lib/queries';
 import { ClientPanel } from '../components/ClientPanel';
 import { ClientForm } from '../components/ClientForm';
 import { formatCustomValue } from '../components/CustomFieldInput';
@@ -90,6 +90,7 @@ export function buildColumns(statuses: Status[], tags: Tag[], fields: CustomFiel
 }
 
 export function ClientsPage() {
+  const labels = useNavLabels();
   const { id } = useParams();
   const selectedId = id ? Number(id) : null;
   const navigate = useNavigate();
@@ -175,7 +176,7 @@ export function ClientsPage() {
       <div className={`flex min-w-0 flex-1 flex-col ${selectedId ? 'hidden xl:flex' : ''}`}>
         <div className="px-4 pb-3 pt-5 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="mr-auto text-2xl font-semibold text-slate-800">Klienci <span className="text-base font-normal text-slate-400">{rows.length}{rows.length !== clients.length && ` z ${clients.length}`}</span></h1>
+            <h1 className="mr-auto text-2xl font-semibold text-slate-800">{labels.clients} <span className="text-base font-normal text-slate-400">{rows.length}{rows.length !== clients.length && ` z ${clients.length}`}</span></h1>
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input className="input w-64 pl-9" placeholder="Szukaj klienta…" value={search} onChange={(e) => setSearch(e.target.value)} />

@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Download, FileBarChart, Users, Clock, ShieldAlert, 
 import { addDays, format } from 'date-fns';
 import { api } from '../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber } from '../lib/format';
-import { useStatuses, useTags, useUsers, useVoivodeships } from '../lib/queries';
+import { useNavLabels, useStatuses, useTags, useUsers, useVoivodeships } from '../lib/queries';
 import { exportXlsx } from '../lib/export';
 import { Button, ErrorText, Field, StatusBadge } from '../components/ui';
 import { ClientPanel } from '../components/ClientPanel';
@@ -38,6 +38,7 @@ export function ReportsPage() {
   const current = reports.find((r) => r.key === search.get('r')) ?? reports[0];
   const [values, setValues] = useState<Record<string, string>>({});
   const [openClient, setOpenClient] = useState<number | null>(null);
+  const labels = useNavLabels();
 
   useEffect(() => { if (current) setValues(defaults(current)); }, [current?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -58,7 +59,7 @@ export function ReportsPage() {
   return (
     <div className="flex h-full flex-col lg:flex-row">
       <aside className="shrink-0 border-b border-slate-200 bg-white/70 p-4 lg:w-72 lg:overflow-y-auto lg:border-r lg:border-b-0">
-        <h1 className="mb-4 flex items-center gap-2 text-lg font-semibold"><FileBarChart size={20} className="text-brand-600" /> Raporty</h1>
+        <h1 className="mb-4 flex items-center gap-2 text-lg font-semibold"><FileBarChart size={20} className="text-brand-600" /> {labels.reports}</h1>
         {groups.map((g) => {
           const Icon = GROUP_ICONS[g] ?? FileBarChart;
           return (

@@ -2,18 +2,19 @@ import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDownWideNarrow, CalendarDays, Check, Columns3, Copy, KeyRound } from 'lucide-react';
 import { api, type Me } from '../lib/api';
-import { clientColumnsOf, DEFAULT_CLIENT_COLUMNS, ROLE_LABELS, useFields, useMe } from '../lib/queries';
+import { clientColumnsOf, DEFAULT_CLIENT_COLUMNS, ROLE_LABELS, useFields, useMe, useNavLabels } from '../lib/queries';
 import { buildColumns } from './Clients';
 import { Button, ErrorText, Field } from '../components/ui';
 import { AvatarUpload } from '../components/AvatarUpload';
 
 export function SettingsPage() {
   const { data: me } = useMe();
+  const labels = useNavLabels();
   if (!me) return null;
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-semibold">Ustawienia</h1>
+        <h1 className="text-2xl font-semibold">{labels.settings}</h1>
         <p className="mb-4 text-sm text-slate-500">{me.fullName} · {me.login} · {ROLE_LABELS[me.role]}</p>
         <AvatarUpload userId={me.id} name={me.fullName} src={me.avatarUrl} />
       </div>

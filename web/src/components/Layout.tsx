@@ -3,12 +3,13 @@ import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { CheckSquare, FileBarChart, Home, LogOut, Menu, Settings, ShieldCheck, Users } from 'lucide-react';
 import { api } from '../lib/api';
-import { ROLE_LABELS, seesAll, useMe, useTasks } from '../lib/queries';
+import { ROLE_LABELS, seesAll, useMe, useNavLabels, useTasks } from '../lib/queries';
 import { Avatar } from './ui';
 import { Reminders } from './Reminders';
 
 export function Layout() {
   const { data: me, isLoading, isError } = useMe();
+  const labels = useNavLabels(Boolean(me));
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -27,12 +28,12 @@ export function Layout() {
   };
 
   const nav = [
-    { to: '/', label: 'Pulpit', icon: Home, end: true },
-    { to: '/clients', label: 'Klienci', icon: Users },
-    { to: '/tasks', label: 'Moje zadania', icon: CheckSquare, badge: dueCount },
-    ...(seesAll(me) ? [{ to: '/reports', label: 'Raporty', icon: FileBarChart }] : []),
-    { to: '/settings', label: 'Ustawienia', icon: Settings },
-    ...(me.role === 'ADMIN' ? [{ to: '/admin', label: 'Administracja', icon: ShieldCheck }] : []),
+    { to: '/', label: labels.dashboard, icon: Home, end: true },
+    { to: '/clients', label: labels.clients, icon: Users },
+    { to: '/tasks', label: labels.tasks, icon: CheckSquare, badge: dueCount },
+    ...(seesAll(me) ? [{ to: '/reports', label: labels.reports, icon: FileBarChart }] : []),
+    { to: '/settings', label: labels.settings, icon: Settings },
+    ...(me.role === 'ADMIN' ? [{ to: '/admin', label: labels.admin, icon: ShieldCheck }] : []),
   ];
 
   return (
