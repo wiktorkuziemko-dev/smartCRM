@@ -4,9 +4,10 @@ export interface Me {
   id: number; login: string; fullName: string; email: string | null; role: Role;
   settings: { clientColumns?: string[] };
   googleCalendarId: string | null; googleEnabled: boolean; googleServiceEmail: string | null;
+  avatarUrl: string | null;
 }
 export interface UserRow {
-  id: number; fullName: string; role: Role; active: boolean;
+  id: number; fullName: string; role: Role; active: boolean; avatarUrl?: string | null;
   login?: string; email?: string | null; googleConnected?: boolean;
 }
 export type AccessLevel = 'none' | 'view' | 'edit';

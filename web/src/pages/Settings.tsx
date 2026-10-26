@@ -4,19 +4,18 @@ import { CalendarDays, Check, Columns3, Copy, KeyRound } from 'lucide-react';
 import { api, type Me } from '../lib/api';
 import { clientColumnsOf, DEFAULT_CLIENT_COLUMNS, ROLE_LABELS, useFields, useMe } from '../lib/queries';
 import { buildColumns } from './Clients';
-import { Avatar, Button, ErrorText, Field } from '../components/ui';
+import { Button, ErrorText, Field } from '../components/ui';
+import { AvatarUpload } from '../components/AvatarUpload';
 
 export function SettingsPage() {
   const { data: me } = useMe();
   if (!me) return null;
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-      <div className="flex items-center gap-4">
-        <Avatar name={me.fullName} size={56} />
-        <div>
-          <h1 className="text-2xl font-semibold">Ustawienia</h1>
-          <p className="text-sm text-slate-500">{me.fullName} · {me.login} · {ROLE_LABELS[me.role]}</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold">Ustawienia</h1>
+        <p className="mb-4 text-sm text-slate-500">{me.fullName} · {me.login} · {ROLE_LABELS[me.role]}</p>
+        <AvatarUpload userId={me.id} name={me.fullName} src={me.avatarUrl} />
       </div>
       <ColumnsSection me={me} />
       <CalendarSection me={me} />

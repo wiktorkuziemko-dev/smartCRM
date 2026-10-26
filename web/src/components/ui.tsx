@@ -87,7 +87,10 @@ export function TagPicker({ tags, value, onChange }: { tags: { id: number; name:
 }
 
 const avatarColors = ['bg-blue-500', 'bg-sky-500', 'bg-indigo-500', 'bg-cyan-600', 'bg-violet-500', 'bg-teal-500'];
-export function Avatar({ name, size = 28 }: { name: string | null | undefined; size?: number }) {
+export function Avatar({ name, size = 28, src }: { name: string | null | undefined; size?: number; src?: string | null }) {
+  if (src) {
+    return <img src={src} alt={name ?? ''} title={name ?? ''} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+  }
   const color = avatarColors[(name ?? '').length % avatarColors.length];
   return (
     <span className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${color}`}

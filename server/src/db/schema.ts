@@ -1,5 +1,5 @@
 import {
-  pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index, primaryKey, type AnyPgColumn,
+  customType, pgTable, pgEnum, serial, integer, text, varchar, boolean, timestamp, jsonb, index, primaryKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['ADMIN', 'MANAGER', 'SALES']);
@@ -25,10 +25,21 @@ export const users = pgTable('users', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   // Numer (serial) nadajnika GPS w systemie E-SERVER – pojazd, którym jeździ użytkownik.
   gpsSerial: varchar('gps_serial', { length: 32 }),
+  /** Czas wgrania zdjęcia profilowego (wersja w adresie obrazka); null = brak zdjęcia. */
+  avatarUpdatedAt: timestamp('avatar_updated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Rejestr logowań – do statystyk aktywności handlowców. */
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
+
+/** Zdjęcia profilowe (osobno, żeby lista użytkowników nie ciągnęła obrazków). */
+export const userAvatars = pgTable('user_avatars', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  mimeType: varchar('mime_type', { length: 32 }).notNull(),
+  data: bytea('data').notNull(),
+});
+
 export const loginEvents = pgTable('login_events', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

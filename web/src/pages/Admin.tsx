@@ -11,6 +11,7 @@ import { ArchiveRestore, ArrowDown, ArrowUp, CalendarDays, Check, Eye, Pencil, P
 import { api, type CustomField, type FieldType, type Role, type Status, type Tag, type UserRow, type ArchivedClient } from '../lib/api';
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
+import { AvatarUpload } from '../components/AvatarUpload';
 
 const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import'] as const;
 
@@ -75,7 +76,7 @@ function UsersTab() {
           <tbody>
             {users.map((u) => (
               <tr key={u.id} className="border-t border-slate-100">
-                <td className="px-4 py-2.5"><div className="flex items-center gap-2"><Avatar name={u.fullName} /> <div><div className="font-medium">{u.fullName}</div><div className="text-xs text-slate-400">{u.email}</div></div></div></td>
+                <td className="px-4 py-2.5"><div className="flex items-center gap-2"><Avatar name={u.fullName} src={u.avatarUrl} /> <div><div className="font-medium">{u.fullName}</div><div className="text-xs text-slate-400">{u.email}</div></div></div></td>
                 <td className="px-4 text-slate-600">{u.login}</td>
                 <td className="px-4">{ROLE_LABELS[u.role]}</td>
                 <td className="px-4 text-slate-500">{u.googleConnected ? 'połączono' : '—'}</td>
@@ -116,6 +117,8 @@ function UserForm({ user, onClose }: { user?: UserRow; onClose: () => void }) {
   return (
     <Modal title={user ? 'Edytuj użytkownika' : 'Nowy użytkownik'} onClose={onClose}>
       <div className="space-y-3">
+        {user ? <AvatarUpload userId={user.id} name={user.fullName} src={user.avatarUrl} size={64} />
+          : <p className="text-xs text-slate-400">Zdjęcie profilowe dodasz po zapisaniu użytkownika.</p>}
         <Field label="Imię i nazwisko"><input className="input" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} autoFocus /></Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Login"><input className="input" value={form.login} disabled={Boolean(user)} onChange={(e) => setForm({ ...form, login: e.target.value })} /></Field>

@@ -5,6 +5,7 @@ import { db, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
+import { avatarUrl } from './users.js';
 import { addDays, dayRange, todayInTz } from '../lib/time.js';
 import {
   DEFAULT_BASE_URL, clearEServerCache, driveProfile, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
@@ -83,7 +84,7 @@ export async function gpsRoutes(app: FastifyInstance) {
     const range = dayRange(q.from || addDays(today, -6), q.to || today);
     if (typeof range === 'string') return reply.code(400).send({ error: range });
     const { from, to } = range;
-    const people = await db.select({ userId: schema.users.id, fullName: schema.users.fullName, serial: schema.users.gpsSerial })
+    const people = await db.select({ userId: schema.users.id, fullName: schema.users.fullName, serial: schema.users.gpsSerial, avatarUpdatedAt: schema.users.avatarUpdatedAt })
       .from(schema.users).where(and(isNotNull(schema.users.gpsSerial), eq(schema.users.active, true))).orderBy(asc(schema.users.fullName));
     const errors: string[] = [];
 
@@ -105,7 +106,7 @@ export async function gpsRoutes(app: FastifyInstance) {
         errors.push(`${p.fullName}: ${(e as Error).message}`);
       }
       return {
-        userId: p.userId, fullName: p.fullName, serial: p.serial,
+        userId: p.userId, fullName: p.fullName, serial: p.serial, avatarUrl: avatarUrl({ id: p.userId, avatarUpdatedAt: p.avatarUpdatedAt }),
         vehicle: device ? { name: device.deviceName, plateNo: device.plateNo } : null,
         position: pos, stats, profile,
       };

@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, fmtNumber, initials } from '../lib/format';
 import { useMe } from '../lib/queries';
+import { Avatar } from './ui';
 import { DriveCharts, type DriveProfile } from './DriveCharts';
 import { PeriodPicker, isValidPeriod, periodLabel, presetPeriod, type Period } from './PeriodPicker';
 
@@ -15,7 +16,7 @@ interface Stats {
   distanceKm: number; drivingSec: number; parkingSec: number; trips: number; activeDays: number; avgSpeed: number;
   longestTripKm: number; longestTripAt: string | null; longestTripSec: number;
 }
-interface Row { userId: number; fullName: string; serial: string; vehicle: { name: string; plateNo: string } | null; position: Position | null; stats: Stats | null; profile: DriveProfile | null }
+interface Row { userId: number; fullName: string; avatarUrl: string | null; serial: string; vehicle: { name: string; plateNo: string } | null; position: Position | null; stats: Stats | null; profile: DriveProfile | null }
 interface Overview { configured: boolean; from?: string; to?: string; days?: number; weekdayDays?: number[]; rows?: Row[]; errors?: string[] }
 
 /** Stan pojazdu – kolor zawsze z etykietą (nie sam kolor). */
@@ -124,8 +125,13 @@ export function FieldActivity() {
                   return (
                     <tr key={r.userId} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => setFocus(r.userId)}>
                       <td className="px-5 py-2.5">
-                        <div className="font-medium">{r.fullName}</div>
-                        <div className="text-xs text-slate-400">{r.vehicle ? `${r.vehicle.plateNo} · ` : ''}nadajnik {r.serial}</div>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={r.fullName} src={r.avatarUrl} size={30} />
+                          <div>
+                            <div className="font-medium">{r.fullName}</div>
+                            <div className="text-xs text-slate-400">{r.vehicle ? `${r.vehicle.plateNo} · ` : ''}nadajnik {r.serial}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3">
                         <span className="inline-flex items-center gap-1.5 text-xs">
@@ -193,9 +199,12 @@ function VehicleMap({ rows, focus }: { rows: Row[]; focus: number | null }) {
       const st = stateOf(r.position);
       const icon = L.divIcon({
         className: '',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
-        html: `<div style="width:34px;height:34px;border-radius:9999px;background:${STATES[st].color};color:#fff;font:600 12px/34px system-ui,sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(15,23,42,.35)">${initials(r.fullName)}</div>`,
+        iconSize: r.avatarUrl ? [44, 44] : [34, 34],
+        iconAnchor: r.avatarUrl ? [22, 22] : [17, 17],
+        // Ze zdjęciem: kolor stanu pojazdu jako obwódka; bez zdjęcia – inicjały na kolorowym tle.
+        html: r.avatarUrl
+          ? `<div style="width:44px;height:44px;border-radius:9999px;border:3px solid ${STATES[st].color};background:#fff;box-shadow:0 2px 6px rgba(15,23,42,.35);overflow:hidden"><img src="${r.avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;border:2px solid #fff;box-sizing:border-box"></div>`
+          : `<div style="width:34px;height:34px;border-radius:9999px;background:${STATES[st].color};color:#fff;font:600 12px/34px system-ui,sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(15,23,42,.35)">${initials(r.fullName)}</div>`,
       });
       const p = r.position;
       const popup = `<div style="font:13px system-ui,sans-serif;min-width:180px">

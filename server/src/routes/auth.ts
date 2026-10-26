@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
+import { avatarUrl } from './users.js';
 import { createSession, destroySession, requireAuth, trackActivity } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
 import { getServiceAccount } from '../lib/google.js';
@@ -26,12 +27,13 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req) => {
-    const [u] = await db.select({ googleCalendarId: schema.users.googleCalendarId, settings: schema.users.settings })
+    const [u] = await db.select({ googleCalendarId: schema.users.googleCalendarId, settings: schema.users.settings, avatarUpdatedAt: schema.users.avatarUpdatedAt })
       .from(schema.users).where(eq(schema.users.id, req.user.id));
     const account = await getServiceAccount();
     return {
       ...req.user,
       settings: u?.settings ?? {},
+      avatarUrl: u ? avatarUrl({ id: req.user.id, avatarUpdatedAt: u.avatarUpdatedAt }) : null,
       googleCalendarId: u?.googleCalendarId ?? null,
       googleEnabled: Boolean(account),
       googleServiceEmail: account?.client_email ?? null,

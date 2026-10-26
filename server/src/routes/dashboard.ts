@@ -4,6 +4,7 @@ import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { config } from '../config.js';
 import { dayRange } from '../lib/time.js';
+import { avatarUrl } from './users.js';
 import { clientEditableBy, clientVisibleTo } from '../lib/access.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
@@ -114,7 +115,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 }
 
 export interface ActivityRow {
-  period: 'today' | 'yesterday' | 'week' | 'custom'; userId: number; fullName: string; lastSeenAt: string | null;
+  period: 'today' | 'yesterday' | 'week' | 'custom'; userId: number; fullName: string; lastSeenAt: string | null; avatarUrl: string | null;
   logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
 }
 
@@ -126,7 +127,7 @@ async function activityByPeriod(userId?: number, range?: { from: Date; to: Date 
   const tz = config.timezone;
   const who = userId ? sql`u.id = ${userId}` : sql`u.role = 'SALES' and u.active`;
   const { rows } = await db.execute<{
-    period: ActivityRow['period']; user_id: number; full_name: string; last_seen_at: string | null;
+    period: ActivityRow['period']; user_id: number; full_name: string; last_seen_at: string | null; avatar_updated_at: string | null;
     logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
   }>(sql`
     with b as (select (date_trunc('day', now() at time zone ${tz}) at time zone ${tz}) as t0),
@@ -137,7 +138,7 @@ async function activityByPeriod(userId?: number, range?: { from: Date; to: Date 
       union all select 'yesterday', t0 - interval '1 day', t0 from b
       union all select 'week', t0 - interval '6 days', now() + interval '1 day' from b`}
     )
-    select p.period, u.id as user_id, u.full_name, u.last_seen_at,
+    select p.period, u.id as user_id, u.full_name, u.last_seen_at, u.avatar_updated_at,
       (select count(*) from login_events l where l.user_id = u.id and l.at >= p.s and l.at < p.e)::int as logins,
       coalesce(act.meetings, 0) as meetings, coalesce(act.calls, 0) as calls,
       coalesce(act.emails, 0) as emails, coalesce(act.comments, 0) as comments,
@@ -156,6 +157,7 @@ async function activityByPeriod(userId?: number, range?: { from: Date; to: Date 
   `);
   return rows.map((r) => ({
     period: r.period, userId: r.user_id, fullName: r.full_name,
+    avatarUrl: avatarUrl({ id: r.user_id, avatarUpdatedAt: r.avatar_updated_at ? new Date(r.avatar_updated_at) : null }),
     lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).toISOString() : null,
     logins: r.logins, meetings: r.meetings, calls: r.calls, emails: r.emails, comments: r.comments, clients: r.clients,
   }));

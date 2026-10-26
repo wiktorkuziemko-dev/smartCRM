@@ -7,7 +7,7 @@ import { Avatar } from './ui';
 import { PeriodPicker, isValidPeriod, presetPeriod, type Period } from './PeriodPicker';
 
 interface Row {
-  userId: number; fullName: string; lastSeenAt: string | null;
+  userId: number; fullName: string; lastSeenAt: string | null; avatarUrl: string | null;
   logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
 }
 
@@ -68,7 +68,7 @@ export function TeamActivity() {
               return (
                 <tr key={r.userId} className="border-t border-slate-100">
                   <td className="px-5 py-2.5">
-                    <div className="flex items-center gap-2"><Avatar name={r.fullName} size={26} /><span className="font-medium">{r.fullName}</span></div>
+                    <div className="flex items-center gap-2"><Avatar name={r.fullName} src={r.avatarUrl} size={26} /><span className="font-medium">{r.fullName}</span></div>
                   </td>
                   {METRICS.map((m) => {
                     const v = Number(r[m.key]);

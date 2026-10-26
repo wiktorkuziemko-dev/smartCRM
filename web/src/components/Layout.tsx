@@ -55,7 +55,7 @@ export function Layout() {
         </nav>
         <div className="border-t border-white/15 p-3">
           <NavLink to="/settings" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-white/10">
-            <Avatar name={me.fullName} size={32} />
+            <Avatar name={me.fullName} src={me.avatarUrl} size={32} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{me.fullName}</div>
               <div className="text-xs text-white/70">{ROLE_LABELS[me.role]}</div>
