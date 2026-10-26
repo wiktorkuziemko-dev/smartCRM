@@ -67,25 +67,26 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           <button onClick={onClose} className="rounded-lg p-1.5 text-white/80 hover:bg-white/15 hover:text-white" title="Zamknij"><X size={18} /></button>
         </div>
 
-        {/* Osoba kontaktowa */}
-        <div className="mt-4 rounded-xl bg-white/15 p-3 backdrop-blur">
-          {primary ? (
-            <div className="flex items-center gap-3">
-              <Avatar name={primary.name} size={40} />
+        {/* Osoby kontaktowe – jedyne miejsce ich wyświetlania i dodawania; główna osoba pierwsza. */}
+        <div className="mt-4 space-y-3 rounded-xl bg-white/15 p-3 backdrop-blur">
+          {primary ? [primary, ...others].map((c, i) => (
+            <div key={c.id} className={`flex items-center gap-3 ${i ? 'border-t border-white/15 pt-3' : ''}`}>
+              <Avatar name={c.name} size={i ? 32 : 40} />
               <div className="min-w-0 flex-1">
-                <div className="font-medium">{primary.name}</div>
-                {primary.position && <div className="text-xs text-white/75">{primary.position}</div>}
+                <div className="font-medium">{c.name}</div>
+                {c.position && <div className="text-xs text-white/75">{c.position}</div>}
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                  {primary.phone && <a href={`tel:${primary.phone}`} className="inline-flex items-center gap-1 hover:underline"><Phone size={13} />{primary.phone}</a>}
-                  {primary.email && <a href={`mailto:${primary.email}`} className="inline-flex items-center gap-1 hover:underline"><Mail size={13} />{primary.email}</a>}
+                  {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 hover:underline"><Phone size={13} />{c.phone}</a>}
+                  {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 hover:underline"><Mail size={13} />{c.email}</a>}
                 </div>
               </div>
-              {canEdit && <button onClick={() => setContactForm({ contact: primary })} className="self-start rounded-md p-1 text-white/70 hover:bg-white/15 hover:text-white"><Pencil size={14} /></button>}
+              {canEdit && <button onClick={() => setContactForm({ contact: c })} className="self-start rounded-md p-1 text-white/70 hover:bg-white/15 hover:text-white" title="Edytuj osobę kontaktową"><Pencil size={14} /></button>}
             </div>
-          ) : !canEdit ? (
-            <span className="text-sm text-white/75">Brak osoby kontaktowej</span>
-          ) : (
-            <button onClick={() => setContactForm({})} className="inline-flex items-center gap-1 text-sm text-white/90 hover:underline"><Plus size={14} /> Dodaj osobę kontaktową</button>
+          )) : !canEdit && <span className="text-sm text-white/75">Brak osoby kontaktowej</span>}
+          {canEdit && (
+            <button onClick={() => setContactForm({})} className={`inline-flex items-center gap-1 text-sm text-white/90 hover:underline ${primary ? 'border-t border-white/15 pt-2 w-full' : ''}`}>
+              <Plus size={14} /> Dodaj osobę kontaktową
+            </button>
           )}
         </div>
       </div>
@@ -121,29 +122,6 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
             <Detail label="Ostatnia zmiana">{fmtDateTime(client.updatedAt)}</Detail>
           </dl>
         </Section>
-
-        {/* Bez osób kontaktowych dodaje się je przyciskiem w nagłówku – sekcja dopiero dla kolejnych osób. */}
-        {primary && (
-        <Section title={`Pozostałe osoby kontaktowe (${others.length})`} action={canEdit && <button onClick={() => setContactForm({})} className="text-brand-600 hover:text-brand-700" title="Dodaj osobę kontaktową"><Plus size={16} /></button>}>
-          {others.length === 0 ? <p className="text-sm text-slate-400">Brak innych osób.</p> : (
-            <div className="space-y-2">
-              {others.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 text-sm">
-                  <Avatar name={c.name} size={28} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{c.name} {c.position && <span className="font-normal text-slate-500">· {c.position}</span>}</div>
-                    <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
-                      {c.phone && <a href={`tel:${c.phone}`} className="hover:text-brand-600">{c.phone}</a>}
-                      {c.email && <a href={`mailto:${c.email}`} className="hover:text-brand-600">{c.email}</a>}
-                    </div>
-                  </div>
-                  {canEdit && <button onClick={() => setContactForm({ contact: c })} className="text-slate-400 hover:text-brand-600"><Pencil size={14} /></button>}
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
-        )}
 
         {seesAll(me) && !archived && <VisibilitySection client={client} />}
 
