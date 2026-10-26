@@ -7,7 +7,7 @@ import { requireAuth, requireRole } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
 import { addDays, dayRange, todayInTz } from '../lib/time.js';
 import {
-  DEFAULT_BASE_URL, clearEServerCache, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
+  DEFAULT_BASE_URL, clearEServerCache, driveProfile, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
   removeEServerConfig, saveEServerConfig, summarize,
 } from '../lib/eserver.js';
 
@@ -96,18 +96,28 @@ export async function gpsRoutes(app: FastifyInstance) {
       const device = devices.find((d) => d.serial === p.serial);
       const pos = positions.find((x) => (x.serial && x.serial === p.serial) || (device && x.deviceId === device.deviceId)) ?? null;
       let stats = null;
+      let profile = null;
       try {
-        stats = summarize(await fetchHistory(cfg, p.serial!, from, to, range.untilNow), config.timezone);
+        const history = await fetchHistory(cfg, p.serial!, from, to, range.untilNow);
+        stats = summarize(history, config.timezone);
+        profile = driveProfile(history, config.timezone);
       } catch (e) {
         errors.push(`${p.fullName}: ${(e as Error).message}`);
       }
       return {
         userId: p.userId, fullName: p.fullName, serial: p.serial,
         vehicle: device ? { name: device.deviceName, plateNo: device.plateNo } : null,
-        position: pos, stats,
+        position: pos, stats, profile,
       };
     });
 
-    return { configured: true, from: from.toISOString(), to: to.toISOString(), days: range.days, rows, errors: [...new Set(errors)] };
+    return { configured: true, from: from.toISOString(), to: to.toISOString(), days: range.days, weekdayDays: weekdayCounts(q.from || addDays(today, -6), range.days), rows, errors: [...new Set(errors)] };
   });
+}
+
+/** Ile razy każdy dzień tygodnia (pon.–niedz.) występuje w okresie – do średnich na dzień. */
+function weekdayCounts(fromDay: string, days: number) {
+  const counts = new Array<number>(7).fill(0);
+  for (let i = 0; i < days; i++) counts[(new Date(`${addDays(fromDay, i)}T12:00:00Z`).getUTCDay() + 6) % 7]++;
+  return counts;
 }

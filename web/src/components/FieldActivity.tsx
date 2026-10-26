@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, fmtNumber, initials } from '../lib/format';
 import { useMe } from '../lib/queries';
+import { DriveCharts, type DriveProfile } from './DriveCharts';
 import { PeriodPicker, isValidPeriod, periodLabel, presetPeriod, type Period } from './PeriodPicker';
 
 interface Position { lat: number; lon: number; speed: number; heading: number; ignition: 'ON' | 'OFF' | 'UNKNOWN'; at: string | null; mileage: number | null }
@@ -14,8 +15,8 @@ interface Stats {
   distanceKm: number; drivingSec: number; parkingSec: number; trips: number; activeDays: number; avgSpeed: number;
   longestTripKm: number; longestTripAt: string | null; longestTripSec: number;
 }
-interface Row { userId: number; fullName: string; serial: string; vehicle: { name: string; plateNo: string } | null; position: Position | null; stats: Stats | null }
-interface Overview { configured: boolean; from?: string; to?: string; days?: number; rows?: Row[]; errors?: string[] }
+interface Row { userId: number; fullName: string; serial: string; vehicle: { name: string; plateNo: string } | null; position: Position | null; stats: Stats | null; profile: DriveProfile | null }
+interface Overview { configured: boolean; from?: string; to?: string; days?: number; weekdayDays?: number[]; rows?: Row[]; errors?: string[] }
 
 /** Stan pojazdu – kolor zawsze z etykietą (nie sam kolor). */
 type VehicleState = 'driving' | 'idle' | 'parked' | 'stale';
@@ -159,6 +160,7 @@ export function FieldActivity() {
               </tbody>
             </table>
           </div>
+          <DriveCharts people={rows} weekdayDays={data?.weekdayDays ?? [0, 0, 0, 0, 0, 0, 0]} />
         </>
       )}
     </section>

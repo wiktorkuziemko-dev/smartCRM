@@ -191,3 +191,31 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   }));
   return out;
 }
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/**
+ * Rozkład jazdy w czasie: sekundy jazdy w każdej godzinie doby (0–23) oraz kilometry w każdym dniu tygodnia
+ * (pon.–niedz.), wg czasu lokalnego. Odcinek jazdy przechodzący przez kilka godzin jest dzielony proporcjonalnie.
+ */
+export function driveProfile(h: HistoryData, timezone: string) {
+  const hourSec = new Array<number>(24).fill(0);
+  const weekdayKm = new Array<number>(7).fill(0);
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', hourCycle: 'h23', weekday: 'short' });
+  for (const s of h.details) {
+    if (!s.motion) continue;
+    const begin = parseUtc(s.begin).getTime();
+    const end = parseUtc(s.end).getTime();
+    const dur = end - begin;
+    if (!(dur > 0)) continue;
+    // Granice pełnych godzin UTC pokrywają się z granicami godzin w strefach z przesunięciem całogodzinnym (np. Polska).
+    for (let t = begin; t < end;) {
+      const next = Math.min(end, Math.floor(t / 3_600_000) * 3_600_000 + 3_600_000);
+      const parts = Object.fromEntries(fmt.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+      hourSec[Number(parts.hour) % 24] += (next - t) / 1000;
+      weekdayKm[WEEKDAYS.indexOf(parts.weekday)] += (s.distance ?? 0) * ((next - t) / dur);
+      t = next;
+    }
+  }
+  return { hourSec: hourSec.map(Math.round), weekdayKm: weekdayKm.map((km) => Math.round(km * 10) / 10) };
+}
