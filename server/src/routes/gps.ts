@@ -8,7 +8,7 @@ import { parse } from '../lib/validate.js';
 import { addDays, todayInTz, zonedDate } from '../lib/time.js';
 import {
   DEFAULT_BASE_URL, clearEServerCache, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
-  removeEServerConfig, saveEServerConfig, summarize,
+  describeCaPem, normalizeCaPem, removeEServerConfig, saveEServerConfig, summarize,
 } from '../lib/eserver.js';
 
 export async function gpsRoutes(app: FastifyInstance) {
@@ -22,6 +22,7 @@ export async function gpsRoutes(app: FastifyInstance) {
       .from(schema.users).orderBy(asc(schema.users.fullName));
     return {
       configured: Boolean(cfg), baseUrl: cfg?.baseUrl ?? DEFAULT_BASE_URL, login: cfg?.login ?? '',
+      caPem: cfg?.caPem ?? '', caCerts: describeCaPem(cfg?.caPem),
       users: users.filter((u) => u.active || u.gpsSerial),
     };
   });
@@ -32,12 +33,15 @@ export async function gpsRoutes(app: FastifyInstance) {
       baseUrl: z.string().trim().url('Podaj poprawny adres URL').max(300),
       login: z.string().trim().min(1, 'Podaj login').max(200),
       password: z.string().max(200).optional(),
+      caPem: z.string().max(50_000).nullable().optional(),
     }), req.body, reply);
     if (!body) return;
     const current = await getEServerConfig();
     const passwordMd5 = body.password ? md5(body.password) : current?.passwordMd5;
     if (!passwordMd5) return reply.code(400).send({ error: 'Podaj hasło do API' });
-    const cfg = { baseUrl: body.baseUrl.replace(/\/+$/, ''), login: body.login, passwordMd5 };
+    let caPem: string | undefined;
+    try { caPem = normalizeCaPem(body.caPem); } catch (err) { return reply.code(400).send({ error: (err as Error).message }); }
+    const cfg = { baseUrl: body.baseUrl.replace(/\/+$/, ''), login: body.login, passwordMd5, ...(caPem ? { caPem } : {}) };
     try {
       const devices = await fetchDevices(cfg, true);
       await saveEServerConfig(cfg);
