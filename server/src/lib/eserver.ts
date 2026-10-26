@@ -1,6 +1,4 @@
-import crypto, { X509Certificate } from 'node:crypto';
-import fs from 'node:fs';
-import tls from 'node:tls';
+import crypto from 'node:crypto';
 import { Agent, FormData, fetch, type Dispatcher, type Response } from 'undici';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
@@ -17,11 +15,7 @@ import { db, schema } from '../db/index.js';
 const SETTINGS_KEY = 'eserver';
 export const DEFAULT_BASE_URL = 'https://e-server.com.pl/api';
 
-export interface EServerConfig {
-  baseUrl: string; login: string; passwordMd5: string;
-  /** Opcjonalne dodatkowe certyfikaty CA (PEM) – np. certyfikat pośredni, którego serwer nie wysyła. */
-  caPem?: string;
-}
+export interface EServerConfig { baseUrl: string; login: string; passwordMd5: string }
 export interface Device { deviceId: string; deviceName: string; serial: string; plateNo: string }
 export interface Position {
   deviceId: string; serial: string | null; lat: number; lon: number; speed: number; heading: number;
@@ -39,7 +33,7 @@ function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<
   value.catch(() => cache.delete(key)); // błędów nie zapamiętujemy
   return value;
 }
-export function clearEServerCache() { cache.clear(); agents.clear(); }
+export function clearEServerCache() { cache.clear(); }
 
 export async function getEServerConfig(): Promise<EServerConfig | null> {
   const [row] = await db.select().from(schema.appSettings).where(eq(schema.appSettings.key, SETTINGS_KEY));
@@ -59,119 +53,10 @@ export async function removeEServerConfig() {
 
 export const md5 = (text: string) => crypto.createHash('md5').update(text, 'utf8').digest('hex');
 
-// --- Niepełny łańcuch certyfikatów SSL po stronie serwera ---
-// Część serwerów wysyła sam certyfikat strony bez certyfikatu pośredniego. Przeglądarki dociągają go same
-// (adres „CA Issuers” w certyfikacie – AIA), Node.js nie. Robimy to samo: pobieramy brakujący certyfikat
-// pośredni i łączymy się z pełną weryfikacją względem zaufanych urzędów certyfikacji (nie wyłączamy jej).
-const CHAIN_ERRORS = new Set(['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY']);
-const agents = new Map<string, Dispatcher>();
-
-/** Zaufane urzędy: wbudowane w Node.js + opcjonalnie plik NODE_EXTRA_CA_CERTS (np. certyfikat zapory firmowej). */
-function trustedRoots() {
-  const roots = [...tls.rootCertificates];
-  const extra = process.env.NODE_EXTRA_CA_CERTS;
-  if (extra && fs.existsSync(extra)) roots.push(fs.readFileSync(extra, 'utf8'));
-  return roots;
-}
-
-/** Pobiera certyfikaty pośrednie wskazane w certyfikacie serwera (AIA „CA Issuers”). Błąd opisuje, co się nie udało. */
-async function fetchIntermediates(host: string, port: number): Promise<string[]> {
-  // Połączenie wyłącznie po to, by odczytać certyfikat serwera – żadne dane nie są wysyłane.
-  const peer = await new Promise<tls.DetailedPeerCertificate>((resolve, reject) => {
-    const socket = tls.connect({ host, port, servername: host, rejectUnauthorized: false }, () => {
-      const cert = socket.getPeerCertificate(true);
-      socket.end();
-      resolve(cert);
-    });
-    socket.setTimeout(15_000, () => socket.destroy(new Error('przekroczono czas połączenia')));
-    socket.on('error', reject);
-  });
-  const issuer = [peer.issuer?.O, peer.issuer?.CN].filter(Boolean).join(' / ') || 'nieznany';
-  const found: string[] = [];
-  let infoAccess = peer.infoAccess;
-  for (let depth = 0; depth < 3; depth++) {
-    const uri = infoAccess?.['CA Issuers - URI']?.find((u) => /^https?:\/\//i.test(u));
-    if (!uri) {
-      if (!found.length) throw new Error(`certyfikat serwera (wystawca: ${issuer}) nie zawiera adresu do pobrania certyfikatu pośredniego`);
-      break;
-    }
-    let raw: Buffer;
-    try {
-      const res = await fetch(uri, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      raw = Buffer.from(await res.arrayBuffer());
-    } catch (err) {
-      const e = err as Error & { cause?: { code?: string } };
-      throw new Error(`nie udało się pobrać certyfikatu pośredniego (wystawca: ${issuer}) z ${uri}: ${e.cause?.code ?? e.message}`);
-    }
-    let cert: X509Certificate;
-    try {
-      cert = new X509Certificate(raw.includes('-----BEGIN') ? raw.toString('utf8') : raw);
-    } catch {
-      throw new Error(`plik z ${uri} nie jest certyfikatem w obsługiwanym formacie (wystawca: ${issuer})`);
-    }
-    found.push(cert.toString());
-    if (cert.issuer === cert.subject) break;
-    infoAccess = cert.infoAccess ? parseInfoAccess(cert.infoAccess) : undefined;
-  }
-  return found;
-}
-
-/** Zamienia tekstowe infoAccess z X509Certificate na postać z getPeerCertificate(). */
-function parseInfoAccess(text: string): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const line of text.split('\n')) {
-    const m = line.match(/^(.+?):(.+)$/);
-    if (m) (out[m[1].trim()] ??= []).push(m[2].trim());
-  }
-  return out;
-}
-
-/** Agent HTTPS ufający wbudowanym urzędom + wklejonym przez admina certyfikatom (pełna weryfikacja). */
-function agentWith(extra: string[]) {
-  return new Agent({ connect: { ca: [...trustedRoots(), ...extra] } });
-}
-
-/** Agent dla certyfikatów wklejonych w ustawieniach (bez nich – domyślne połączenie). */
-function configuredAgent(cfg: EServerConfig): Dispatcher | undefined {
-  const key = `${new URL(cfg.baseUrl).host}|${cfg.caPem ? md5(cfg.caPem) : ''}`;
-  const aia = agents.get(key);
-  if (aia) return aia;
-  if (!cfg.caPem) return undefined;
-  const agent = agentWith([cfg.caPem]);
-  agents.set(key, agent);
-  return agent;
-}
-
-async function agentWithIntermediates(cfg: EServerConfig, url: URL) {
-  const intermediates = await fetchIntermediates(url.hostname, Number(url.port) || 443);
-  const agent = agentWith([...(cfg.caPem ? [cfg.caPem] : []), ...intermediates]);
-  agents.set(`${url.host}|${cfg.caPem ? md5(cfg.caPem) : ''}`, agent);
-  console.log(`E-SERVER: serwer ${url.host} nie wysyła pełnego łańcucha certyfikatów – pobrano brakujący certyfikat pośredni.`);
-  return agent;
-}
-
-/** Sprawdza wklejone certyfikaty PEM i zwraca je w ujednoliconej postaci (pusty tekst = brak). */
-export function normalizeCaPem(text: string | null | undefined): string | undefined {
-  const blocks = (text ?? '').match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
-  if (!text?.trim()) return undefined;
-  if (!blocks) throw new Error('Wklejony tekst nie zawiera certyfikatu PEM (-----BEGIN CERTIFICATE----- … -----END CERTIFICATE-----)');
-  return blocks.map((b) => {
-    try { return new X509Certificate(b).toString(); } catch { throw new Error('Wklejony certyfikat jest uszkodzony – skopiuj go ponownie w całości'); }
-  }).join('');
-}
-
-/** Krótki opis certyfikatów do wyświetlenia w ustawieniach. */
-export function describeCaPem(pem: string | undefined) {
-  if (!pem) return [];
-  return (pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? []).map((b) => {
-    const c = new X509Certificate(b);
-    const cn = (dn: string) => dn.match(/CN=(.+)/)?.[1] ?? dn.split('\n')[0];
-    return { subject: cn(c.subject), issuer: cn(c.issuer), validTo: new Date(c.validTo).toISOString() };
-  });
-}
-
-const PASTE_HINT = 'Możesz wkleić brakujący certyfikat pośredni w polu „Dodatkowe certyfikaty CA” (instrukcja pod polem).';
+// Certyfikat SSL serwera E-SERVER nie przechodzi weryfikacji (niepełny łańcuch / nieznany wystawca).
+// Na życzenie właściciela integracja łączy się bez sprawdzania certyfikatu – jak Postman z domyślnymi
+// ustawieniami. Dotyczy wyłącznie zapytań do E-SERVER; pozostałe połączenia aplikacji są weryfikowane.
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 /** Zapytanie POST do API (parametry jako form-data, jak w dokumentacji). */
 async function call<T>(cfg: EServerConfig, fn: string, params: Record<string, string> = {}): Promise<T> {
@@ -186,22 +71,9 @@ async function call<T>(cfg: EServerConfig, fn: string, params: Record<string, st
   };
   let res: Response;
   try {
-    res = await send(url.protocol === 'https:' ? configuredAgent(cfg) : undefined);
+    res = await send(url.protocol === 'https:' ? insecureAgent : undefined);
   } catch (err) {
-    const code = (err as { cause?: { code?: string } }).cause?.code ?? '';
-    if (url.protocol !== 'https:' || !CHAIN_ERRORS.has(code)) throw new Error(connectionError(err, cfg.baseUrl));
-    // Niepełny łańcuch certyfikatów – uzupełniamy go i ponawiamy zapytanie (z pełną weryfikacją).
-    let agent: Dispatcher;
-    try {
-      agent = await agentWithIntermediates(cfg, url);
-    } catch (aiaErr) {
-      throw new Error(`${connectionError(err, cfg.baseUrl)} Szczegóły: ${(aiaErr as Error).message}. ${PASTE_HINT}`);
-    }
-    try {
-      res = await send(agent);
-    } catch (err2) {
-      throw new Error(`${connectionError(err2, cfg.baseUrl)}${(err2 as { cause?: { code?: string } }).cause?.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ? ` ${PASTE_HINT}` : ''}`);
-    }
+    throw new Error(connectionError(err, cfg.baseUrl));
   }
   if (res.status === 403 || res.status === 401) {
     throw new Error('E-SERVER odmówił dostępu (403): nieprawidłowy login lub hasło albo dostęp do API nie jest aktywny na koncie.');
