@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { config } from '../config.js';
+import { dayRange } from '../lib/time.js';
 import { clientEditableBy, clientVisibleTo } from '../lib/access.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
@@ -37,7 +38,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
    * Aktywność handlowców (dla kierownika i admina): dziś, wczoraj, ostatnie 7 dni (z dzisiejszym).
    * Wejścia = logowania i powroty do aplikacji po co najmniej 30 min przerwy.
    */
-  app.get('/api/dashboard/team', { preHandler: [requireAuth, requireRole('ADMIN', 'MANAGER')] }, async () => {
+  app.get('/api/dashboard/team', { preHandler: [requireAuth, requireRole('ADMIN', 'MANAGER')] }, async (req, reply) => {
+    const q = req.query as { from?: string; to?: string };
+    if (q.from || q.to) {
+      // Dowolny okres wskazany przez kierownika (dni włącznie).
+      const range = dayRange(q.from ?? '', q.to ?? '');
+      if (typeof range === 'string') return reply.code(400).send({ error: range });
+      // Okres kończący się dziś obejmuje też działania sprzed chwili – koniec przesuwamy jak w „Dziś”.
+      const end = range.untilNow ? new Date(Date.now() + 86_400_000) : range.to;
+      return { custom: await activityByPeriod(undefined, { from: range.from, to: end }) };
+    }
     const rows = await activityByPeriod();
     const result: Record<string, ActivityRow[]> = { today: [], yesterday: [], week: [] };
     for (const r of rows) result[r.period].push(r);
@@ -104,7 +114,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 }
 
 export interface ActivityRow {
-  period: 'today' | 'yesterday' | 'week'; userId: number; fullName: string; lastSeenAt: string | null;
+  period: 'today' | 'yesterday' | 'week' | 'custom'; userId: number; fullName: string; lastSeenAt: string | null;
   logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
 }
 
@@ -112,7 +122,7 @@ export interface ActivityRow {
  * Liczniki aktywności w okresach dziś / wczoraj / ostatnie 7 dni (granice dni w strefie aplikacji).
  * Bez userId – wszyscy aktywni handlowcy; z userId – tylko ten użytkownik (dowolna rola).
  */
-async function activityByPeriod(userId?: number): Promise<ActivityRow[]> {
+async function activityByPeriod(userId?: number, range?: { from: Date; to: Date }): Promise<ActivityRow[]> {
   const tz = config.timezone;
   const who = userId ? sql`u.id = ${userId}` : sql`u.role = 'SALES' and u.active`;
   const { rows } = await db.execute<{
@@ -120,10 +130,12 @@ async function activityByPeriod(userId?: number): Promise<ActivityRow[]> {
     logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
   }>(sql`
     with b as (select (date_trunc('day', now() at time zone ${tz}) at time zone ${tz}) as t0),
-    p as (
+    p as (${range
+      ? sql`select 'custom' as period, ${range.from.toISOString()}::timestamptz as s, ${range.to.toISOString()}::timestamptz as e`
+      : sql`
       select 'today' as period, t0 as s, now() + interval '1 day' as e from b
       union all select 'yesterday', t0 - interval '1 day', t0 from b
-      union all select 'week', t0 - interval '6 days', now() + interval '1 day' from b
+      union all select 'week', t0 - interval '6 days', now() + interval '1 day' from b`}
     )
     select p.period, u.id as user_id, u.full_name, u.last_seen_at,
       (select count(*) from login_events l where l.user_id = u.id and l.at >= p.s and l.at < p.e)::int as logins,

@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import { api } from '../lib/api';
 import { fmtAgo, fmtDateTime, fmtNumber, initials } from '../lib/format';
 import { useMe } from '../lib/queries';
+import { PeriodPicker, isValidPeriod, periodLabel, presetPeriod, type Period } from './PeriodPicker';
 
 interface Position { lat: number; lon: number; speed: number; heading: number; ignition: 'ON' | 'OFF' | 'UNKNOWN'; at: string | null; mileage: number | null }
 interface Stats {
@@ -14,7 +15,7 @@ interface Stats {
   longestTripKm: number; longestTripAt: string | null; longestTripSec: number;
 }
 interface Row { userId: number; fullName: string; serial: string; vehicle: { name: string; plateNo: string } | null; position: Position | null; stats: Stats | null }
-interface Overview { configured: boolean; from?: string; to?: string; rows?: Row[]; errors?: string[] }
+interface Overview { configured: boolean; from?: string; to?: string; days?: number; rows?: Row[]; errors?: string[] }
 
 /** Stan pojazdu – kolor zawsze z etykietą (nie sam kolor). */
 type VehicleState = 'driving' | 'idle' | 'parked' | 'stale';
@@ -38,12 +39,15 @@ export const fmtDuration = (sec: number) => {
   return h ? `${h} h ${m} min` : `${m} min`;
 };
 
-/** Pulpit kierownika i admina: mapa bieżących lokalizacji i statystyki jazdy z 7 dni (E-SERVER). */
+/** Pulpit kierownika i admina: mapa bieżących lokalizacji i statystyki jazdy z wybranego okresu (E-SERVER). */
 export function FieldActivity() {
   const { data: me } = useMe();
+  const [period, setPeriod] = useState<Period>(() => presetPeriod('week'));
   const { data, isFetching, refetch, error } = useQuery({
-    queryKey: ['gps-overview'],
-    queryFn: () => api.get<Overview>('/api/gps/overview'),
+    queryKey: ['gps-overview', period.from, period.to],
+    queryFn: () => api.get<Overview>(`/api/gps/overview?from=${period.from}&to=${period.to}`),
+    enabled: isValidPeriod(period),
+    placeholderData: (prev) => prev,
     refetchInterval: 60_000,
   });
   const [focus, setFocus] = useState<number | null>(null);
@@ -69,11 +73,13 @@ export function FieldActivity() {
     <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-3 px-5 pt-5 pb-3">
         <h2 className="mr-auto flex items-center gap-2 font-semibold"><Car size={18} className="text-brand-600" /> Praca w terenie</h2>
-        <span className="text-xs text-slate-400">Statystyki: ostatnie 7 dni · pozycje odświeżane co minutę</span>
+        <PeriodPicker value={period} onChange={setPeriod} />
         <button onClick={() => refetch()} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600" title="Odśwież">
           <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
         </button>
       </div>
+
+      <p className="px-5 pb-2 text-xs text-slate-400">Statystyki jazdy: {periodLabel(period)} · mapa pokazuje bieżące lokalizacje (odświeżane co minutę)</p>
 
       {(error || (data?.errors?.length ?? 0) > 0) && (
         <div className="mx-5 mb-3 flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -135,7 +141,7 @@ export function FieldActivity() {
                             {s.longestTripKm ? <>{fmtNumber(s.longestTripKm)} km<div className="text-xs text-slate-400">{fmtDuration(s.longestTripSec)} · {s.longestTripAt && fmtDateTime(s.longestTripAt)}</div></> : '—'}
                           </td>
                           <td className="px-3 text-right tabular-nums">{s.trips}</td>
-                          <td className="px-3 text-right tabular-nums">{s.activeDays}/7</td>
+                          <td className="px-3 text-right tabular-nums">{s.activeDays}/{data?.days ?? 7}</td>
                           <td className="px-5 text-right tabular-nums">{s.avgSpeed ? `${fmtNumber(s.avgSpeed)} km/h` : '—'}</td>
                         </>
                       ) : <td colSpan={6} className="px-3 text-center text-xs text-slate-400">brak danych z E-SERVER</td>}
@@ -216,7 +222,7 @@ function VehicleMap({ rows, focus }: { rows: Row[]; focus: number | null }) {
 
   return (
     <div className="relative mx-5">
-      <div ref={el} className="h-[380px] overflow-hidden rounded-xl border border-slate-200" />
+      <div ref={el} className="h-[494px] overflow-hidden rounded-xl border border-slate-200" />
       <div className="pointer-events-none absolute left-14 top-3 z-[400] flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-xs text-slate-600 shadow">
         <Navigation size={12} /> Bieżące lokalizacje
       </div>

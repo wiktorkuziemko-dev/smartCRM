@@ -5,7 +5,7 @@ import { db, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { parse } from '../lib/validate.js';
-import { addDays, todayInTz, zonedDate } from '../lib/time.js';
+import { addDays, dayRange, todayInTz } from '../lib/time.js';
 import {
   DEFAULT_BASE_URL, clearEServerCache, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
   removeEServerConfig, saveEServerConfig, summarize,
@@ -74,9 +74,15 @@ export async function gpsRoutes(app: FastifyInstance) {
   });
 
   // --- Pulpit kierownika i admina: mapa i statystyki z ostatnich 7 dni ---
-  app.get('/api/gps/overview', { preHandler: requireRole('ADMIN', 'MANAGER') }, async () => {
+  app.get('/api/gps/overview', { preHandler: requireRole('ADMIN', 'MANAGER') }, async (req, reply) => {
     const cfg = await getEServerConfig();
     if (!cfg) return { configured: false };
+    // Okres statystyk: dni od–do (włącznie); domyślnie 7 dni kalendarzowych z dzisiejszym.
+    const q = req.query as { from?: string; to?: string };
+    const today = todayInTz();
+    const range = dayRange(q.from || addDays(today, -6), q.to || today);
+    if (typeof range === 'string') return reply.code(400).send({ error: range });
+    const { from, to } = range;
     const people = await db.select({ userId: schema.users.id, fullName: schema.users.fullName, serial: schema.users.gpsSerial })
       .from(schema.users).where(and(isNotNull(schema.users.gpsSerial), eq(schema.users.active, true))).orderBy(asc(schema.users.fullName));
     const errors: string[] = [];
@@ -86,16 +92,12 @@ export async function gpsRoutes(app: FastifyInstance) {
       fetchPositions(cfg).catch((e: Error) => { errors.push(e.message); return []; }),
     ]);
 
-    // Okres: od początku dnia 6 dni temu (strefa aplikacji) do teraz – 7 dni kalendarzowych z dzisiejszym.
-    const to = new Date();
-    const from = zonedDate(addDays(todayInTz(), -6), '00:00');
-
     const rows = await mapLimit(people, 4, async (p) => {
       const device = devices.find((d) => d.serial === p.serial);
       const pos = positions.find((x) => (x.serial && x.serial === p.serial) || (device && x.deviceId === device.deviceId)) ?? null;
       let stats = null;
       try {
-        stats = summarize(await fetchHistory(cfg, p.serial!, from, to), config.timezone);
+        stats = summarize(await fetchHistory(cfg, p.serial!, from, to, range.untilNow), config.timezone);
       } catch (e) {
         errors.push(`${p.fullName}: ${(e as Error).message}`);
       }
@@ -106,6 +108,6 @@ export async function gpsRoutes(app: FastifyInstance) {
       };
     });
 
-    return { configured: true, from: from.toISOString(), to: to.toISOString(), rows, errors: [...new Set(errors)] };
+    return { configured: true, from: from.toISOString(), to: to.toISOString(), days: range.days, rows, errors: [...new Set(errors)] };
   });
 }

@@ -1,21 +1,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Mail, MessageSquare, Phone, UserPlus, Users, LogIn, MapPin } from 'lucide-react';
+import { Activity, Mail, MessageSquare, Phone, UserPlus, Users, LogIn } from 'lucide-react';
 import { api } from '../lib/api';
 import { fmtAgo } from '../lib/format';
 import { Avatar } from './ui';
+import { PeriodPicker, isValidPeriod, presetPeriod, type Period } from './PeriodPicker';
 
 interface Row {
   userId: number; fullName: string; lastSeenAt: string | null;
   logins: number; meetings: number; calls: number; emails: number; comments: number; clients: number;
 }
-type Period = 'today' | 'yesterday' | 'week';
-
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'today', label: 'Dziś' },
-  { key: 'yesterday', label: 'Wczoraj' },
-  { key: 'week', label: 'Ostatnie 7 dni' },
-];
 
 const METRICS: { key: keyof Row; label: string; icon: typeof Phone; title: string }[] = [
   { key: 'logins', label: 'Wejścia', icon: LogIn, title: 'Logowania i powroty do aplikacji po co najmniej 30 min przerwy' },
@@ -29,29 +23,30 @@ const METRICS: { key: keyof Row; label: string; icon: typeof Phone; title: strin
 /** Działania (bez wejść) – do kolumny „Razem” i podświetlenia braku aktywności. */
 const actions = (r: Row) => r.meetings + r.calls + r.emails + r.comments + r.clients;
 
-/** Aktywność handlowców dla kierownika i admina: dziś / wczoraj / ostatnie 7 dni. */
+/** Aktywność handlowców dla kierownika i admina: dziś / wczoraj / ostatnie 7 dni / dowolny okres. */
 export function TeamActivity() {
-  const [period, setPeriod] = useState<Period>('today');
-  const { data, isLoading } = useQuery({
+  const [period, setPeriod] = useState<Period>(() => presetPeriod('today'));
+  const custom = period.key === 'custom';
+  const presets = useQuery({
     queryKey: ['dashboard', 'team'],
-    queryFn: () => api.get<Record<Period, Row[]>>('/api/dashboard/team'),
+    queryFn: () => api.get<Record<'today' | 'yesterday' | 'week', Row[]>>('/api/dashboard/team'),
     refetchInterval: 60_000,
   });
-  const rows = data?.[period] ?? [];
+  const range = useQuery({
+    queryKey: ['dashboard', 'team', period.from, period.to],
+    queryFn: () => api.get<{ custom: Row[] }>(`/api/dashboard/team?from=${period.from}&to=${period.to}`),
+    enabled: custom && isValidPeriod(period),
+    placeholderData: (prev) => prev,
+  });
+  const isLoading = custom ? range.isLoading : presets.isLoading;
+  const rows = (custom ? range.data?.custom : presets.data?.[period.key as 'today']) ?? [];
   const totals = METRICS.map((m) => rows.reduce((s, r) => s + Number(r[m.key]), 0));
 
   return (
     <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-3 px-5 pt-5 pb-3">
         <h2 className="mr-auto flex items-center gap-2 font-semibold"><Activity size={18} className="text-brand-600" /> Aktywność handlowców</h2>
-        <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
-          {PERIODS.map((p) => (
-            <button key={p.key} onClick={() => setPeriod(p.key)}
-              className={`rounded-md px-3 py-1 text-sm font-medium transition ${period === p.key ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <PeriodPicker value={period} onChange={setPeriod} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -98,9 +93,7 @@ export function TeamActivity() {
         </table>
         {!isLoading && rows.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-400">Brak aktywnych handlowców.</p>}
       </div>
-      <p className="flex items-center gap-1.5 px-5 py-3 text-xs text-slate-400">
-        <MapPin size={12} /> Statystyki pracy w terenie (przejechane kilometry, najdłuższa trasa) pojawią się po podłączeniu systemu GPS.
-      </p>
+      {range.error && custom ? <p className="px-5 py-3 text-sm text-red-600">{(range.error as Error).message}</p> : <div className="h-2" />}
     </section>
   );
 }

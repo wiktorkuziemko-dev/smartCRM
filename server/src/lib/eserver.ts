@@ -147,8 +147,9 @@ const utc = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
 /** Daty z odpowiedzi (date_format = 'utc') mają postać "YYYY-MM-DD HH:mm:ss" w UTC. */
 export const parseUtc = (s: string) => new Date(`${s.replace(' ', 'T')}Z`);
 
-export async function fetchHistory(cfg: EServerConfig, serial: string, from: Date, to: Date): Promise<HistoryData> {
-  const key = `history:${serial}:${from.toISOString()}`;
+export async function fetchHistory(cfg: EServerConfig, serial: string, from: Date, to: Date, untilNow = false): Promise<HistoryData> {
+  // Okres do „teraz” zapamiętujemy po samym początku (koniec przesuwa się z każdym zapytaniem).
+  const key = `history:${serial}:${from.toISOString()}:${untilNow ? 'now' : to.toISOString()}`;
   return cached(key, 5 * 60_000, async () => {
     const r = await call<{ result?: string; data?: { distance?: number | string; driving_time?: number | string; parking_time?: number | string; details?: Segment[] } }>(
       cfg, 'history', { serial, date_from: utc(from), date_to: utc(to), details: '1', date_format: 'utc' },
