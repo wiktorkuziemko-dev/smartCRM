@@ -177,7 +177,11 @@ export const appSettings = pgTable('app_settings', {
   value: jsonb('value').notNull(),
 });
 
-export interface UserSettings { clientColumns?: string[] }
+export interface UserSettings {
+  clientColumns?: string[];
+  /** Kolejność historii na karcie klienta; brak = 'desc' (najnowsze na początku). */
+  historyOrder?: 'asc' | 'desc';
+}
 
 export type User = typeof users.$inferSelect;
 export type Role = User['role'];

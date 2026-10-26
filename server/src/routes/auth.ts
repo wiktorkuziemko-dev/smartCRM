@@ -44,6 +44,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.put('/api/me/settings', { preHandler: requireAuth }, async (req, reply) => {
     const body = parse(z.object({
       clientColumns: z.array(z.string().max(80)).max(100).optional(),
+      historyOrder: z.enum(['asc', 'desc']).optional(),
     }), req.body, reply);
     if (!body) return;
     const [u] = await db.select({ settings: schema.users.settings }).from(schema.users).where(eq(schema.users.id, req.user.id));

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Check, Columns3, Copy, KeyRound } from 'lucide-react';
+import { ArrowDownWideNarrow, CalendarDays, Check, Columns3, Copy, KeyRound } from 'lucide-react';
 import { api, type Me } from '../lib/api';
 import { clientColumnsOf, DEFAULT_CLIENT_COLUMNS, ROLE_LABELS, useFields, useMe } from '../lib/queries';
 import { buildColumns } from './Clients';
@@ -18,6 +18,7 @@ export function SettingsPage() {
         <AvatarUpload userId={me.id} name={me.fullName} src={me.avatarUrl} />
       </div>
       <ColumnsSection me={me} />
+      <HistoryOrderSection me={me} />
       <CalendarSection me={me} />
       <PasswordSection />
     </div>
@@ -35,6 +36,44 @@ function Card({ icon, title, children }: { icon: ReactNode; title: string; child
 
 function Saved({ text }: { text: string }) {
   return text ? <span className="inline-flex items-center gap-1 text-sm text-emerald-600"><Check size={15} /> {text}</span> : null;
+}
+
+function HistoryOrderSection({ me }: { me: Me }) {
+  const qc = useQueryClient();
+  const [saved, setSaved] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const value = me.settings.historyOrder ?? 'desc';
+
+  async function save(historyOrder: 'asc' | 'desc') {
+    setError(null);
+    try {
+      const settings = await api.put<Me['settings']>('/api/me/settings', { historyOrder });
+      qc.setQueryData<Me>(['me'], (old) => (old ? { ...old, settings } : old));
+      setSaved('Zapisano');
+      setTimeout(() => setSaved(''), 2500);
+    } catch (err) { setError(err); }
+  }
+
+  const options = [
+    { key: 'desc' as const, title: 'Malejąco – najnowsze na początku', hint: 'Pole dodawania wpisu nad historią.' },
+    { key: 'asc' as const, title: 'Rosnąco – od najstarszych', hint: 'Najnowsze wpisy na dole, pole dodawania pod historią.' },
+  ];
+
+  return (
+    <Card icon={<ArrowDownWideNarrow size={18} />} title="Historia na karcie klienta">
+      <p className="mb-3 text-sm text-slate-500">Kolejność wpisów w historii (komentarze, telefony, spotkania, e-maile).</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((o) => (
+          <label key={o.key} className={`flex cursor-pointer gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition ${value === o.key ? 'border-brand-500 bg-brand-50/60' : 'border-slate-200 hover:bg-slate-50'}`}>
+            <input type="radio" name="historyOrder" className="mt-0.5 h-4 w-4 accent-brand-600" checked={value === o.key} onChange={() => save(o.key)} />
+            <span><span className="font-medium text-slate-800">{o.title}</span><span className="block text-xs text-slate-500">{o.hint}</span></span>
+          </label>
+        ))}
+      </div>
+      <ErrorText error={error} />
+      <div className="mt-2"><Saved text={saved} /></div>
+    </Card>
+  );
 }
 
 function ColumnsSection({ me }: { me: Me }) {

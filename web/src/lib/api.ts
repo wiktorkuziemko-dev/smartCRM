@@ -2,7 +2,7 @@ export type Role = 'ADMIN' | 'MANAGER' | 'SALES';
 
 export interface Me {
   id: number; login: string; fullName: string; email: string | null; role: Role;
-  settings: { clientColumns?: string[] };
+  settings: { clientColumns?: string[]; historyOrder?: 'asc' | 'desc' };
   googleCalendarId: string | null; googleEnabled: boolean; googleServiceEmail: string | null;
   avatarUrl: string | null;
 }

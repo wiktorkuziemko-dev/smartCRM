@@ -47,15 +47,19 @@ export function ActivityFeed({ clientId, ownerId, readOnly }: { clientId: number
     queryKey: ['activities', clientId],
     queryFn: () => api.get<Activity[]>(`/api/clients/${clientId}/activities`),
   });
-  // Najstarsze na górze, kompozytor na dole – jak w Asanie.
-  const ordered = [...activities].reverse();
+  const { data: me } = useMe();
+  // Kolejność z Ustawień użytkownika: domyślnie najnowsze na początku (pole nowego wpisu nad historią);
+  // rosnąco – najstarsze na górze, pole nowego wpisu na dole (jak w Asanie). API zwraca od najnowszych.
+  const newestFirst = me?.settings.historyOrder !== 'asc';
+  const ordered = newestFirst ? activities : [...activities].reverse();
 
   return (
     <div>
+      {!readOnly && newestFirst && <Composer clientId={clientId} ownerId={ownerId} atTop />}
       <div className="space-y-4">
         {ordered.map((a) => <ActivityItem key={a.id} activity={a} readOnly={readOnly} />)}
       </div>
-      {!readOnly && <Composer clientId={clientId} ownerId={ownerId} />}
+      {!readOnly && !newestFirst && <Composer clientId={clientId} ownerId={ownerId} />}
     </div>
   );
 }
@@ -149,7 +153,7 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
   );
 }
 
-function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | null }) {
+function Composer({ clientId, ownerId, atTop }: { clientId: number; ownerId: number | null; atTop?: boolean }) {
   const { data: me } = useMe();
   const { data: users = [] } = useUsers();
   const qc = useQueryClient();
@@ -210,7 +214,7 @@ function Composer({ clientId, ownerId }: { clientId: number; ownerId: number | n
   };
 
   return (
-    <div className="sticky bottom-0 -mx-5 mt-5 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+    <div className={atTop ? 'mb-5 rounded-xl border border-slate-200 bg-slate-50/60 p-4' : 'sticky bottom-0 -mx-5 mt-5 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur'}>
       <div className="flex gap-3">
         <Avatar name={me?.fullName} size={32} />
         <div className={`min-w-0 flex-1 rounded-xl border bg-white transition ${dragging ? 'border-brand-500 ring-2 ring-brand-100' : 'border-slate-200 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100'}`}
