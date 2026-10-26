@@ -122,8 +122,10 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           </dl>
         </Section>
 
-        <Section title={`Osoby kontaktowe (${client.contacts.length})`} action={canEdit && <button onClick={() => setContactForm({})} className="text-brand-600 hover:text-brand-700"><Plus size={16} /></button>}>
-          {others.length === 0 ? <p className="text-sm text-slate-400">{primary ? 'Brak innych osób.' : 'Brak osób kontaktowych.'}</p> : (
+        {/* Bez osób kontaktowych dodaje się je przyciskiem w nagłówku – sekcja dopiero dla kolejnych osób. */}
+        {primary && (
+        <Section title={`Pozostałe osoby kontaktowe (${others.length})`} action={canEdit && <button onClick={() => setContactForm({})} className="text-brand-600 hover:text-brand-700" title="Dodaj osobę kontaktową"><Plus size={16} /></button>}>
+          {others.length === 0 ? <p className="text-sm text-slate-400">Brak innych osób.</p> : (
             <div className="space-y-2">
               {others.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 text-sm">
@@ -141,6 +143,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
             </div>
           )}
         </Section>
+        )}
 
         {seesAll(me) && !archived && <VisibilitySection client={client} />}
 
