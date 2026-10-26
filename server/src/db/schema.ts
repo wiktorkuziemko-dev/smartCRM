@@ -23,6 +23,8 @@ export const users = pgTable('users', {
   // Ustawienia osobiste, np. kolumny listy klientów widoczne domyślnie.
   settings: jsonb('settings').$type<UserSettings>().notNull().default({}),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  // Numer (serial) nadajnika GPS w systemie E-SERVER – pojazd, którym jeździ użytkownik.
+  gpsSerial: varchar('gps_serial', { length: 32 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

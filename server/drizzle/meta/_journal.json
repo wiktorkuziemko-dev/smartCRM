@@ -71,6 +71,13 @@
       "when": 1792847428488,
       "tag": "0009_import_asana",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793001648816,
+      "tag": "0010_gps_serial",
+      "breakpoints": true
     }
   ]
 }

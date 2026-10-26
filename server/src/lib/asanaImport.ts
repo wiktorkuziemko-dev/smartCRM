@@ -1,6 +1,6 @@
 import { inArray, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
-import { config } from '../config.js';
+import { todayInTz, zonedDate } from './time.js';
 import { VOIVODESHIPS } from '../routes/clients.js';
 
 /**
@@ -65,17 +65,6 @@ function firstPhone(text: string) {
   return null;
 }
 
-/** Data i godzina w strefie aplikacji (np. 09:00 w Warszawie) jako Date (UTC). */
-function zonedDate(day: string, hhmm: string) {
-  const guess = new Date(`${day}T${hhmm}:00Z`);
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-    timeZone: config.timezone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  }).formatToParts(guess).map((p) => [p.type, p.value]));
-  const local = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute);
-  return new Date(guess.getTime() - (local - guess.getTime()));
-}
-
-const todayInTz = () => new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date());
 const date = (v: string | null | undefined, fallback: Date) => (v && !Number.isNaN(Date.parse(v)) ? new Date(v) : fallback);
 const tagName = (project: string) => project.trim().toLowerCase().slice(0, 64);
 

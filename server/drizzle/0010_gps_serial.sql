@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "gps_serial" varchar(32);

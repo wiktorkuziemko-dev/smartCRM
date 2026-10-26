@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { purgeClient, restoreClient } from '../lib/archive';
 import { ImportTab } from './ImportTab';
+import { EServerTab } from './EServerTab';
 import { fmtDateTime, fmtNip } from '../lib/format';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -11,11 +12,13 @@ import { api, type CustomField, type FieldType, type Role, type Status, type Tag
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Import'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Użytkownicy');
+  // ?tab=eserver – bezpośredni link z pulpitu do ustawień integracji GPS.
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<(typeof TABS)[number]>(params.get('tab') === 'eserver' ? 'Integracja E-SERVER' : 'Użytkownicy');
   if (me && me.role !== 'ADMIN') return <Navigate to="/" replace />;
 
   return (
@@ -35,6 +38,7 @@ export function AdminPage() {
       {tab === 'Pola klienta' && <FieldsTab />}
       {tab === 'Archiwum' && <ArchiveTab />}
       {tab === 'Integracje' && <IntegrationsTab />}
+      {tab === 'Integracja E-SERVER' && <EServerTab />}
       {tab === 'Import' && <ImportTab />}
     </div>
   );

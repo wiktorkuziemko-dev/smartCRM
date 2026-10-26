@@ -11,6 +11,7 @@ import { Empty } from '../components/ui';
 import { groupTasks } from '../lib/tasks';
 import { TeamActivity } from '../components/TeamActivity';
 import { SalesDashboard } from '../components/SalesDashboard';
+import { FieldActivity } from '../components/FieldActivity';
 
 /** Handlowiec ma własny pulpit; kierownik i admin – pulpit zespołu. */
 export function DashboardPage() {
@@ -48,6 +49,7 @@ function ManagerDashboard() {
       <p className="mb-6 text-sm text-slate-500">{seesAll(me) ? 'Oto podsumowanie pracy zespołu.' : 'Oto podsumowanie Twojej sprzedaży.'}</p>
 
       {seesAll(me) && <TeamActivity />}
+      {seesAll(me) && <FieldActivity />}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map(({ label, value, icon: Icon, tone }) => (
