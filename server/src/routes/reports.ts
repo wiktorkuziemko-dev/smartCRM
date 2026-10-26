@@ -215,7 +215,7 @@ const REPORTS: Report[] = [
   // --- Aktualność i kontakt ---
   {
     key: 'stale', group: 'Aktualność danych', title: 'Klienci nieedytowani od … dni',
-    description: 'Karty klientów, w których od podanej liczby dni nie zmieniono danych (statusu, opisu, pól).',
+    description: 'Klienci, u których od podanej liczby dni nic się nie zmieniło – ani dane na karcie, ani historia (wpisy, telefony, spotkania, osoby kontaktowe).',
     params: [{ key: 'days', label: 'Bez zmian dłużej niż (dni)', type: 'days', default: 90 }, ...CLIENT_FILTERS],
     run: async (p) => {
       const rows = await clientRows(sql`${clientWhere(p)} and c.updated_at < now() - make_interval(days => ${int(p.days, 90)})`, sql`order by "updatedAt"`);

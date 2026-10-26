@@ -172,6 +172,22 @@ export const clientAccess = pgTable('client_access', {
 
 
 /** Ustawienia aplikacji (klucz → wartość), np. klucz konta usługi Google. */
+/** Dziennik zdarzeń (logi dla administratora): kto, kiedy, co zrobił; nazwy zapisane w chwili zdarzenia. */
+export const auditLog = pgTable('audit_log', {
+  id: serial('id').primaryKey(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userName: varchar('user_name', { length: 128 }),
+  ip: varchar('ip', { length: 64 }),
+  category: varchar('category', { length: 24 }).notNull(),
+  action: varchar('action', { length: 128 }).notNull(),
+  clientId: integer('client_id'),
+  clientName: varchar('client_name', { length: 255 }),
+  summary: text('summary').notNull().default(''),
+  details: jsonb('details').$type<Record<string, unknown>>(),
+  status: integer('status'),
+}, (t) => [index('audit_log_at_idx').on(t.at), index('audit_log_user_idx').on(t.userId), index('audit_log_client_idx').on(t.clientId)]);
+
 export const appSettings = pgTable('app_settings', {
   key: varchar('key', { length: 64 }).primaryKey(),
   value: jsonb('value').notNull(),

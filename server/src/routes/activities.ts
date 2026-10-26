@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { auditNote } from '../lib/audit.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
@@ -161,6 +162,11 @@ export async function activityRoutes(app: FastifyInstance) {
       await db.insert(schema.attachments).values(saved.map((f) => ({ ...f, activityId: activity.id })));
     }
     await touchClient(params.id);
+    const kinds: Record<string, string> = { comment: 'Komentarz', call: 'Telefon', meeting: 'Spotkanie', email: 'E-mail' };
+    auditNote(req, {
+      summary: `${kinds[type] ?? type}: ${content.trim().slice(0, 300)}${saved.length ? ` · załączniki: ${saved.map((f) => f.fileName).join(', ')}` : ''}`,
+      details: { type, ...(taskId ? { taskId } : {}), ...(dueRaw ? { dueAt: dueRaw } : {}) },
+    });
     return activity;
   });
 

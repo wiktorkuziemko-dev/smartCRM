@@ -12,8 +12,9 @@ import { api, type CustomField, type FieldType, type Role, type Status, type Tag
 import { ROLE_LABELS, useFields, useMe, useStatuses, useTags, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 import { AvatarUpload } from '../components/AvatarUpload';
+import { LogsTab } from './LogsTab';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import', 'Logi'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
@@ -23,12 +24,12 @@ export function AdminPage() {
   if (me && me.role !== 'ADMIN') return <Navigate to="/" replace />;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+    <div className={`mx-auto px-4 py-6 sm:px-6 ${tab === 'Logi' ? 'max-w-7xl' : 'max-w-5xl'}`}>
       <h1 className="mb-4 text-2xl font-semibold">Administracja</h1>
-      <div className="mb-5 flex gap-1 border-b border-slate-200">
+      <div className="mb-5 flex flex-wrap gap-x-1 border-b border-slate-200">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition ${tab === t ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {t}
           </button>
         ))}
@@ -41,6 +42,7 @@ export function AdminPage() {
       {tab === 'Integracje' && <IntegrationsTab />}
       {tab === 'Integracja E-SERVER' && <EServerTab />}
       {tab === 'Import' && <ImportTab />}
+      {tab === 'Logi' && <LogsTab />}
     </div>
   );
 }

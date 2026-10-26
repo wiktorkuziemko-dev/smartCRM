@@ -29,9 +29,10 @@ const STATES: Record<VehicleState, { label: string; color: string }> = {
 };
 
 // Nadajniki na postoju raportują co 12 h: dopiero brak raportu dłużej niż 12 h to „brak danych”.
-// Krótsza przerwa w raportach (ponad 30 min) oznacza postój – nawet jeśli ostatni raport był z jazdy.
+// W trasie nadajnik raportuje co kilkadziesiąt sekund – brak raportu ponad 5 min oznacza postój,
+// nawet jeśli ostatni raport był z jazdy.
 const STALE_MS = 12 * 3600e3;
-const LIVE_MS = 30 * 60e3;
+const LIVE_MS = 5 * 60e3;
 
 function stateOf(p: Position): VehicleState {
   const age = p.at ? Date.now() - new Date(p.at).getTime() : Infinity;

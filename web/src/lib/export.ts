@@ -16,6 +16,9 @@ export async function exportXlsx<T>(fileName: string, sheetName: string, columns
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
   ws.eachRow((row, i) => { if (i > 1) row.eachCell((cell) => { if (cell.value instanceof Date) cell.numFmt = 'yyyy-mm-dd hh:mm'; }); });
 
+  // Zapis w dzienniku zdarzeń (kto i co wyeksportował) – bez czekania na odpowiedź.
+  void import('./api').then(({ api }) => api.post('/api/audit/export', { file: fileName, rows: rows.length })).catch(() => {});
+
   const buffer = await wb.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
