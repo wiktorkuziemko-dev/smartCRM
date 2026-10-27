@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/index.js';
+import { config } from '../config.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { dayRange } from '../lib/time.js';
 
@@ -57,6 +58,37 @@ const CLIENTS = sql`
 async function clientRows(where: SQL, order: SQL) {
   const { rows } = await db.execute<Record<string, unknown>>(sql`select * from (${CLIENTS} where ${where}) x ${order}`);
   return rows;
+}
+
+const ENTRY_TYPES: Record<string, string> = { comment: 'Komentarz', call: 'Telefon', meeting: 'Spotkanie', email: 'E-mail' };
+
+/**
+ * Ostatni wpis w historii każdego klienta (komentarz, telefon, spotkanie, e-mail – także zaplanowane jako zadanie):
+ * autor (użytkownik albo etykieta, np. „Poprzedni opiekun”) i treść z rodzajem, datą wpisu i terminem zadania.
+ */
+async function lastEntries(clientIds: number[]) {
+  const out = new Map<number, { lastAuthor: string; lastEntry: string }>();
+  if (!clientIds.length) return out;
+  const { rows } = await db.execute<{ client_id: number; type: string; content: string; created_at: string; author: string | null; due_at: string | null; done: boolean | null }>(sql`
+    select distinct on (a.client_id) a.client_id, a.type, a.content, a.created_at,
+      coalesce(u.full_name, a.author_label) as author, t.due_at, t.done
+    from activities a
+    left join users u on u.id = a.author_id
+    left join tasks t on t.id = a.task_id
+    where a.client_id in (${sql.join(clientIds.map((id) => sql`${id}`), sql`, `)})
+      and a.type in ('comment', 'call', 'meeting', 'email')
+    order by a.client_id, a.created_at desc, a.id desc`);
+  const fmt = (d: string) => new Date(d).toLocaleString('pl-PL', { timeZone: config.timezone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  for (const r of rows) {
+    const kind = ENTRY_TYPES[r.type] ?? r.type;
+    const task = r.due_at ? ` (zadanie na ${fmt(r.due_at)}${r.done ? ', wykonane' : ''})` : '';
+    const text = r.content.replace(/\s+/g, ' ').trim();
+    out.set(r.client_id, {
+      lastAuthor: r.author ?? '—',
+      lastEntry: `${fmt(r.created_at).slice(0, 10)} · ${kind}${task}${text ? `: ${text.length > 300 ? `${text.slice(0, 300)}…` : text}` : ''}`,
+    });
+  }
+  return out;
 }
 
 const daysSince = (d: unknown) => (d ? Math.floor((Date.now() - new Date(d as string).getTime()) / 86_400_000) : null);
@@ -219,9 +251,11 @@ const REPORTS: Report[] = [
     params: [{ key: 'days', label: 'Bez zmian dłużej niż (dni)', type: 'days', default: 90 }, ...CLIENT_FILTERS],
     run: async (p) => {
       const rows = await clientRows(sql`${clientWhere(p)} and c.updated_at < now() - make_interval(days => ${int(p.days, 90)})`, sql`order by "updatedAt"`);
+      const last = await lastEntries(rows.map((r) => r.clientId as number));
       return {
-        columns: [COL.name, COL.owner, COL.status, COL.updatedAt, { key: 'daysIdle', label: 'Dni bez zmian', type: 'days' }, COL.lastContact, COL.potential],
-        rows: rows.map((r) => ({ ...r, daysIdle: daysSince(r.updatedAt) })),
+        columns: [COL.name, COL.owner, COL.status, COL.updatedAt, { key: 'daysIdle', label: 'Dni bez zmian', type: 'days' },
+          { key: 'lastAuthor', label: 'Ostatni wpis – autor', type: 'text' }, { key: 'lastEntry', label: 'Ostatni wpis', type: 'text' }, COL.potential],
+        rows: rows.map((r) => ({ ...r, daysIdle: daysSince(r.updatedAt), ...last.get(r.clientId as number) })),
       };
     },
   },

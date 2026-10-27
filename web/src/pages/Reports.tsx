@@ -160,7 +160,7 @@ function ParamInput({ param: p, value, onChange }: { param: Param; value: string
 
 const isNum = (t: ColType) => t === 'number' || t === 'days';
 /** Kolumny z dłuższym tekstem – zawijane; pozostałe w jednej linii. */
-const WRAP = new Set(['missing', 'title', 'group']);
+const WRAP = new Set(['missing', 'title', 'group', 'lastEntry']);
 
 function cellText(c: Column, v: unknown): string {
   if (v == null || v === '') return '—';
@@ -201,7 +201,7 @@ function ResultTable({ report, result, loading, onClient }: { report: ReportDef;
   function exportFile() {
     exportXlsx(`raport-${report.key}-${format(new Date(), 'yyyy-MM-dd')}.xlsx`, report.title.slice(0, 31), columns.map((c) => ({
       label: c.label,
-      width: c.type === 'client' || c.key === 'missing' || c.key === 'title' ? 36 : undefined,
+      width: c.key === 'lastEntry' ? 70 : c.type === 'client' || c.key === 'missing' || c.key === 'title' ? 36 : undefined,
       value: (r: Row) => {
         const v = r[c.key];
         if (v == null || v === '') return null;
@@ -239,10 +239,12 @@ function ResultTable({ report, result, loading, onClient }: { report: ReportDef;
               return (
                 <tr key={i} className={`border-t border-slate-100 ${clientId ? 'cursor-pointer hover:bg-brand-50/50' : ''}`} onClick={() => clientId && onClient(clientId)}>
                   {columns.map((c) => (
-                    <td key={c.key} className={`px-3 py-2 ${isNum(c.type) ? 'text-right tabular-nums' : ''} ${c.type === 'client' ? 'font-medium text-brand-700' : ''} ${WRAP.has(c.key) ? 'min-w-56' : 'whitespace-nowrap'}`}>
+                    <td key={c.key} className={`px-3 py-2 ${isNum(c.type) ? 'text-right tabular-nums' : ''} ${c.type === 'client' ? 'font-medium text-brand-700' : ''} ${c.key === 'lastEntry' ? 'min-w-80' : WRAP.has(c.key) ? 'min-w-56' : 'whitespace-nowrap'}`}>
                       {c.type === 'status' && r[c.key]
                         ? <StatusBadge name={r[c.key] as string} color={(r.statusColor as string) ?? '#94a3b8'} />
-                        : <span className={r[c.key] == null || r[c.key] === '' || r[c.key] === 0 ? 'text-slate-300' : ''}>{cellText(c, r[c.key])}</span>}
+                        : WRAP.has(c.key) && r[c.key]
+                          ? <div className="line-clamp-3" title={String(r[c.key])}>{cellText(c, r[c.key])}</div>
+                          : <span className={r[c.key] == null || r[c.key] === '' || r[c.key] === 0 ? 'text-slate-300' : ''}>{cellText(c, r[c.key])}</span>}
                     </td>
                   ))}
                 </tr>
