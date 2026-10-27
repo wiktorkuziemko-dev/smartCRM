@@ -8,7 +8,7 @@ import { parse } from '../lib/validate.js';
 import { avatarUrl } from './users.js';
 import { addDays, dayRange, todayInTz } from '../lib/time.js';
 import {
-  DEFAULT_BASE_URL, clearEServerCache, driveProfile, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
+  DEFAULT_BASE_URL, clearEServerCache, driveProfile, fetchStatus, fetchDevices, fetchHistory, fetchPositions, getEServerConfig, mapLimit, md5,
   removeEServerConfig, saveEServerConfig, summarize,
 } from '../lib/eserver.js';
 
@@ -96,6 +96,8 @@ export async function gpsRoutes(app: FastifyInstance) {
     const rows = await mapLimit(people, 4, async (p) => {
       const device = devices.find((d) => d.serial === p.serial);
       const pos = positions.find((x) => (x.serial && x.serial === p.serial) || (device && x.deviceId === device.deviceId)) ?? null;
+      // Stan (jazda/postój) dokładnie wg funkcji status z E-SERVER; błąd nie blokuje reszty danych.
+      const status = await fetchStatus(cfg, p.serial!).catch((e: Error) => { errors.push(`${p.fullName}: ${e.message}`); return null; });
       let stats = null;
       let profile = null;
       try {
@@ -108,7 +110,7 @@ export async function gpsRoutes(app: FastifyInstance) {
       return {
         userId: p.userId, fullName: p.fullName, serial: p.serial, avatarUrl: avatarUrl({ id: p.userId, avatarUpdatedAt: p.avatarUpdatedAt }),
         vehicle: device ? { name: device.deviceName, plateNo: device.plateNo } : null,
-        position: pos, stats, profile,
+        position: pos, status, stats, profile,
       };
     });
 

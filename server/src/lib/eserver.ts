@@ -144,6 +144,25 @@ export async function fetchPositions(cfg: EServerConfig): Promise<Position[]> {
 }
 
 const utc = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
+
+export interface VehicleStatus { motion: boolean; since: string | null }
+
+/** Bieżący stan pojazdu wg E-SERVER (funkcja status): jazda albo postój i od kiedy trwa. */
+export async function fetchStatus(cfg: EServerConfig, serial: string): Promise<VehicleStatus | null> {
+  return cached(`status:${serial}`, 30_000, async () => {
+    const r = await call<{ result?: string; data?: { motion?: unknown; begin?: string | number } }>(
+      cfg, 'status', { serial, date: utc(new Date()), date_format: 'utc' },
+    );
+    if (r.result !== 'OK' || !r.data) return null;
+    const m = r.data.motion;
+    const begin = r.data.begin;
+    const since = typeof begin === 'number' ? new Date(begin * 1000) : typeof begin === 'string' && begin ? parseUtc(begin) : null;
+    return {
+      motion: m === true || m === 1 || m === '1' || m === 'true',
+      since: since && !Number.isNaN(since.getTime()) ? since.toISOString() : null,
+    };
+  });
+}
 /** Daty z odpowiedzi (date_format = 'utc') mają postać "YYYY-MM-DD HH:mm:ss" w UTC. */
 export const parseUtc = (s: string) => new Date(`${s.replace(' ', 'T')}Z`);
 

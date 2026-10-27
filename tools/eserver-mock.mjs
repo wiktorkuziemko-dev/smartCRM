@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 const LOGIN = 'demo', PASSWORD = 'tajne';
 const expected = 'Basic ' + Buffer.from(`${LOGIN}:${crypto.createHash('md5').update(PASSWORD).digest('hex')}`).toString('base64');
 const devices = [
-  { deviceId: 'a1'.repeat(16), deviceName: 'Skoda Octavia 36001039 EL 1234A', serial: '36001039', plateNo: 'EL 1234A', lat: 51.759, lon: 19.456, ign: 'ON', speed: 54 },
+  { deviceId: 'a1'.repeat(16), deviceName: 'Skoda Octavia 36001039 EL 1234A', serial: '36001039', plateNo: 'EL 1234A', lat: 51.759, lon: 19.456, ign: 'ON', speed: 120 },
   { deviceId: 'b2'.repeat(16), deviceName: 'Toyota Corolla 36011882 WA 55555', serial: '36011882', plateNo: 'WA 55555', lat: 52.2297, lon: 21.0122, ign: 'OFF', speed: 0 },
   { deviceId: 'c3'.repeat(16), deviceName: 'Ford Focus 36002050 KR 9876C', serial: '36002050', plateNo: 'KR 9876C', lat: 50.0647, lon: 19.945, ign: 'OFF', speed: 0 },
 ];
@@ -44,10 +44,19 @@ http.createServer(async (req, res) => {
   const now = new Date();
   if (fn === 'devices') return send(200, { deviceList: devices.map(({ deviceId, deviceName, serial, plateNo }) => ({ deviceId, deviceName, serial, plateNo })) });
   if (fn === 'positions') return send(200, { positionList: devices.map((d, i) => {
-    const t = new Date(now.getTime() - (i === 2 ? 26 * 3600e3 : 90e3 * (i + 1)));
+    // Pojazd 1 jedzie, ale ostatni raport pozycji ma 15 min (jak w zgłoszeniu) – stan rozstrzyga /status.
+    const t = new Date(now.getTime() - (i === 2 ? 26 * 3600e3 : i === 0 ? 15 * 60e3 : 90e3 * (i + 1)));
     return { deviceId: d.deviceId, serial: d.serial, coordinate: { latitude: d.lat, longitude: d.lon }, heading: 90 * i, speed: d.speed, ignitionState: d.ign,
       dateTime: { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1, day: t.getUTCDate(), hour: t.getUTCHours(), minute: t.getUTCMinutes(), seconds: t.getUTCSeconds(), timezone: 'UTC' }, vehicleMileage: 120000 + i * 5000 };
   }) });
+  if (fn === 'status') {
+    // Stan pojazdu w chwili 'date': jazda (motion=true) albo postój, z początkiem i końcem odcinka.
+    const i = devices.findIndex((d) => d.serial === String(form.get('serial')));
+    if (i < 0) return send(200, { result: 'ERROR' });
+    const at = new Date(String(form.get('date')).replace(' ', 'T') + 'Z');
+    const begin = new Date(at.getTime() - (i === 0 ? 40 * 60e3 : i === 1 ? 3 * 3600e3 : 30 * 3600e3));
+    return send(200, { result: 'OK', data: { motion: i === 0, begin: fmt(begin), end: fmt(at) } });
+  }
   if (fn === 'history') {
     const serial = String(form.get('serial'));
     if (!devices.some((d) => d.serial === serial)) return send(200, { result: 'ERROR' });

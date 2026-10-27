@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Clock, CalendarDays } from 'lucide-react';
 import { fmtNumber } from '../lib/format';
+import { PeriodPicker, periodLabel, type Period } from './PeriodPicker';
 
 export interface DriveProfile { hourSec: number[]; weekdayKm: number[] }
 interface Person { userId: number; fullName: string; profile: DriveProfile | null }
@@ -30,18 +31,22 @@ function niceScale(max: number) {
 }
 
 /** Rozkład jazdy pod mapą: godziny doby i dni tygodnia – zespół lub wybrany handlowiec. */
-export function DriveCharts({ people, weekdayDays }: { people: Person[]; weekdayDays: number[] }) {
+export function DriveCharts({ people, weekdayDays, period, onPeriod, loading }: {
+  people: Person[]; weekdayDays: number[]; period: Period; onPeriod: (p: Period) => void; loading?: boolean;
+}) {
   const [who, setWho] = useState<number | 'all'>('all');
   const withData = people.filter((p) => p.profile);
-  if (!withData.length) return null;
   const selected = who === 'all' ? withData : withData.filter((p) => p.userId === who);
   const hourSec = Array.from({ length: 24 }, (_, i) => sum(selected.map((p) => p.profile!.hourSec[i])));
   const weekdayKm = Array.from({ length: 7 }, (_, i) => sum(selected.map((p) => p.profile!.weekdayKm[i])));
 
   return (
     <div className="border-t border-slate-100 px-5 pt-4 pb-5">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h3 className="mr-auto text-sm font-semibold text-slate-700">Rozkład jazdy <span className="font-normal text-slate-400">· {periodLabel(period)}{loading ? ' · wczytuję…' : ''}</span></h3>
+        <PeriodPicker value={period} onChange={onPeriod} />
+      </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="mr-2 text-sm font-semibold text-slate-700">Rozkład jazdy</h3>
         {[{ userId: 'all' as const, fullName: 'Cały zespół' }, ...withData].map((p) => (
           <button key={p.userId} onClick={() => setWho(p.userId)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${who === p.userId ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
