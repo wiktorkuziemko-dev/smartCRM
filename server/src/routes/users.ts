@@ -1,10 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, ilike, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
+import { auditNote } from '../lib/audit.js';
+import { syncTaskToGoogle } from '../lib/google.js';
+import { PREVIOUS_OWNER } from '../lib/asanaImport.js';
 
 const roles = z.enum(['ADMIN', 'MANAGER', 'SALES']);
 
@@ -63,6 +66,89 @@ export async function userRoutes(app: FastifyInstance) {
       await db.delete(schema.sessions).where(eq(schema.sessions.userId, params.id));
     }
     return { ok: true };
+  });
+
+  // --- Usuwanie użytkownika (tylko admin): przekazanie klientów i zadań, anonimizacja historii i logów. ---
+  app.get('/api/users/:id/delete-preview', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    if (!params) return;
+    const [u] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, params.id));
+    if (!u) return reply.code(404).send({ error: 'Nie ma takiego użytkownika' });
+    const count = async (q: Promise<{ n: number }[]>) => (await q)[0]?.n ?? 0;
+    const n = sql<number>`count(*)::int`;
+    return {
+      clients: await count(db.select({ n }).from(schema.clients).where(eq(schema.clients.ownerId, params.id))),
+      openTasks: await count(db.select({ n }).from(schema.tasks).where(and(eq(schema.tasks.assigneeId, params.id), eq(schema.tasks.done, false)))),
+      doneTasks: await count(db.select({ n }).from(schema.tasks).where(and(eq(schema.tasks.assigneeId, params.id), eq(schema.tasks.done, true)))),
+      activities: await count(db.select({ n }).from(schema.activities).where(eq(schema.activities.authorId, params.id))),
+      logs: await count(db.select({ n }).from(schema.auditLog).where(eq(schema.auditLog.userId, params.id))),
+    };
+  });
+
+  app.delete('/api/users/:id', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
+    const params = parse(idParam, req.params, reply);
+    const body = parse(z.object({
+      clientsTo: z.number().int().nullable(),   // null = klienci bez opiekuna
+      tasksTo: z.number().int().nullable(),     // null = zadania usuwane
+      anonymizeLogs: z.boolean(),
+    }), req.body ?? {}, reply);
+    if (!params || !body) return;
+    if (params.id === req.user.id) return reply.code(400).send({ error: 'Nie możesz usunąć własnego konta' });
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, params.id));
+    if (!user) return reply.code(404).send({ error: 'Nie ma takiego użytkownika' });
+    for (const target of [body.clientsTo, body.tasksTo]) {
+      if (target == null) continue;
+      const [t] = await db.select({ id: schema.users.id }).from(schema.users)
+        .where(and(eq(schema.users.id, target), eq(schema.users.active, true), ne(schema.users.id, params.id)));
+      if (!t) return reply.code(400).send({ error: 'Wybrana osoba nie istnieje albo ma zablokowane konto' });
+    }
+
+    const moved = await db.transaction(async (tx) => {
+      // 1. Klienci → nowy opiekun (albo bez opiekuna). Wyjątki w dostępie nowego opiekuna do tych klientów
+      //    znikają, żeby jako opiekun miał pełną edycję.
+      const owned = await tx.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.ownerId, params.id));
+      await tx.update(schema.clients).set({ ownerId: body.clientsTo }).where(eq(schema.clients.ownerId, params.id));
+      if (body.clientsTo != null && owned.length) {
+        await tx.delete(schema.clientAccess).where(and(eq(schema.clientAccess.userId, body.clientsTo),
+          sql`${schema.clientAccess.clientId} in (${sql.join(owned.map((c) => sql`${c.id}`), sql`, `)})`));
+      }
+      // 2. Zadania → inna osoba albo usunięcie.
+      let tasks: number[] = [];
+      if (body.tasksTo != null) {
+        tasks = (await tx.update(schema.tasks).set({ assigneeId: body.tasksTo, googleEventId: null })
+          .where(eq(schema.tasks.assigneeId, params.id)).returning({ id: schema.tasks.id })).map((t) => t.id);
+      } else {
+        await tx.delete(schema.tasks).where(eq(schema.tasks.assigneeId, params.id));
+      }
+      // 3. Historia klientów – autor zastąpiony etykietą bez danych osobowych.
+      await tx.update(schema.activities).set({ authorId: null, authorLabel: PREVIOUS_OWNER }).where(eq(schema.activities.authorId, params.id));
+      // 4. Logi – opcjonalna anonimizacja (imię i nazwisko, login, e-mail także w treści wpisów).
+      if (body.anonymizeLogs) {
+        const ANON = 'Usunięty użytkownik';
+        await tx.update(schema.auditLog).set({ userName: ANON }).where(eq(schema.auditLog.userId, params.id));
+        for (const text of [user.fullName, user.email, user.login].filter((t): t is string => Boolean(t && t.length >= 3))) {
+          const like = `%${text.replace(/[%_\\]/g, '\\$&')}%`;
+          await tx.update(schema.auditLog).set({
+            userName: sql`replace(${schema.auditLog.userName}, ${text}, ${ANON})`,
+            summary: sql`replace(${schema.auditLog.summary}, ${text}, ${ANON})`,
+            details: sql`replace(${schema.auditLog.details}::text, ${text}, ${ANON})::jsonb`,
+          }).where(or(ilike(schema.auditLog.userName, like), ilike(schema.auditLog.summary, like), sql`${schema.auditLog.details}::text like ${like}`));
+        }
+      }
+      // 5. Konto (sesje, zdjęcie, dostęp do klientów, statystyki logowań usuwa baza – klucze z kaskadą).
+      await tx.delete(schema.users).where(eq(schema.users.id, params.id));
+      return { clients: owned.length, tasks };
+    });
+
+    // Przekazane otwarte zadania trafiają do kalendarza Google nowej osoby.
+    for (const id of moved.tasks) void syncTaskToGoogle(id);
+
+    const who = (id: number | null) => (id == null ? null : id);
+    auditNote(req, {
+      summary: `${body.anonymizeLogs ? 'Usunięty użytkownik (dane zanonimizowane)' : user.fullName} · klienci: ${moved.clients}, zadania: ${body.tasksTo != null ? `przekazane (${moved.tasks.length})` : 'usunięte'}`,
+      details: { clientsTo: who(body.clientsTo), tasksTo: who(body.tasksTo), anonymizeLogs: body.anonymizeLogs },
+    });
+    return { ok: true, clients: moved.clients, tasks: moved.tasks.length };
   });
 
   // --- Zdjęcie profilowe: admin dla każdego, użytkownik dla siebie. Obraz przycięty i zmniejszony w przeglądarce. ---

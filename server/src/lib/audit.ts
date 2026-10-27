@@ -46,6 +46,7 @@ const ACTIONS: Record<string, ActionDef> = {
 
   'POST /api/users': { category: 'users', label: 'Dodanie użytkownika', entity: 'user' },
   'PUT /api/users/:id': { category: 'users', label: 'Edycja użytkownika', entity: 'user' },
+  'DELETE /api/users/:id': { category: 'users', label: 'Usunięcie użytkownika' },
   'PUT /api/users/:id/avatar': { category: 'users', label: 'Zmiana zdjęcia profilowego', entity: 'user' },
   'DELETE /api/users/:id/avatar': { category: 'users', label: 'Usunięcie zdjęcia profilowego', entity: 'user' },
 
@@ -204,7 +205,7 @@ async function write(req: FastifyRequest, state: AuditState, status: number) {
   }
   if (req.method === 'DELETE' && state.target && !summary) summary = state.target;
   if (state.target && req.method === 'PUT' && def.entity !== 'client' && def.entity !== 'access') summary = summary ? `${state.target}: ${summary}` : state.target;
-  if (body.password && def.entity === 'user') summary = summary ? `${summary}, nowe hasło` : 'nowe hasło';
+  if (body.password && def.entity === 'user' && req.method === 'PUT') summary = summary ? `${summary}, nowe hasło` : 'nowe hasło';
 
   // Dodanie: dane z żądania i id nowego rekordu z odpowiedzi.
   if (req.method === 'POST' && def.category !== 'auth' && def.category !== 'export') {

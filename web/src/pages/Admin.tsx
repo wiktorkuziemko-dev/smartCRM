@@ -65,7 +65,9 @@ async function move(ids: number[], index: number, dir: -1 | 1, url: string) {
 // ---------------- Użytkownicy ----------------
 function UsersTab() {
   const { data: users = [] } = useUsers();
+  const { data: me } = useMe();
   const [edit, setEdit] = useState<{ user?: UserRow } | null>(null);
+  const [remove, setRemove] = useState<UserRow | null>(null);
   return (
     <>
       <div className="mb-3 flex justify-between">
@@ -85,13 +87,17 @@ function UsersTab() {
                 <td className="px-4">{ROLE_LABELS[u.role]}</td>
                 <td className="px-4 text-slate-500">{u.googleConnected ? 'połączono' : '—'}</td>
                 <td className="px-4">{u.active ? <span className="text-emerald-600">aktywny</span> : <span className="text-slate-400">zablokowany</span>}</td>
-                <td className="px-4 text-right"><button onClick={() => setEdit({ user: u })} className="text-slate-400 hover:text-brand-600"><Pencil size={15} /></button></td>
+                <td className="whitespace-nowrap px-4 text-right">
+                  <button onClick={() => setEdit({ user: u })} className="text-slate-400 hover:text-brand-600" title="Edytuj"><Pencil size={15} /></button>
+                  {u.id !== me?.id && <button onClick={() => setRemove(u)} className="ml-3 text-slate-400 hover:text-red-600" title="Usuń użytkownika"><Trash2 size={15} /></button>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
       {edit && <UserForm user={edit.user} onClose={() => setEdit(null)} />}
+      {remove && <DeleteUserDialog user={remove} users={users} onClose={() => setRemove(null)} />}
     </>
   );
 }
@@ -543,5 +549,91 @@ function NavLabelsTab() {
         {saved && <span className="text-sm text-emerald-600">Zapisano</span>}
       </div>
     </section>
+  );
+}
+
+interface DeletePreview { clients: number; openTasks: number; doneTasks: number; activities: number; logs: number }
+
+/** Usunięcie użytkownika: komu przekazać klientów i zadania, anonimizacja logów, potwierdzenie. */
+function DeleteUserDialog({ user, users, onClose }: { user: UserRow; users: UserRow[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { data: preview, error: previewError } = useQuery({
+    queryKey: ['user-delete-preview', user.id],
+    queryFn: () => api.get<DeletePreview>(`/api/users/${user.id}/delete-preview`),
+  });
+  const others = users.filter((u) => u.id !== user.id && u.active);
+  const [clientsTo, setClientsTo] = useState('');
+  const [tasksTo, setTasksTo] = useState('');
+  const [anonymizeLogs, setAnonymizeLogs] = useState(true);
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const tasks = (preview?.openTasks ?? 0) + (preview?.doneTasks ?? 0);
+
+  async function submit() {
+    setBusy(true); setError(null);
+    try {
+      await api.del(`/api/users/${user.id}`, {
+        clientsTo: clientsTo ? Number(clientsTo) : null,
+        tasksTo: tasksTo ? Number(tasksTo) : null,
+        anonymizeLogs,
+      });
+      await Promise.all(['users', 'clients', 'tasks', 'dashboard', 'audit', 'gps-overview'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+      onClose();
+    } catch (err) { setError(err); setBusy(false); }
+  }
+
+  return (
+    <Modal title={`Usuń użytkownika: ${user.fullName}`} onClose={onClose}>
+      <div className="space-y-4 text-sm">
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">
+          Konto zostanie usunięte bezpowrotnie. Jeśli chcesz tylko odebrać dostęp, wystarczy zablokować konto (edycja → „Konto aktywne”).
+        </p>
+        <ErrorText error={previewError} />
+        {preview && (
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+            <li>Klienci pod opieką: <b className="text-slate-900">{preview.clients}</b></li>
+            <li>Zadania otwarte: <b className="text-slate-900">{preview.openTasks}</b>, wykonane: <b className="text-slate-900">{preview.doneTasks}</b></li>
+            <li>Wpisy w historii klientów: <b className="text-slate-900">{preview.activities}</b></li>
+            <li>Zdarzenia w logach: <b className="text-slate-900">{preview.logs}</b></li>
+          </ul>
+        )}
+        {preview && preview.clients > 0 && (
+          <Field label="Klienci tej osoby – nowy opiekun">
+            <select className="input" value={clientsTo} onChange={(e) => setClientsTo(e.target.value)}>
+              <option value="">— bez opiekuna (widoczni tylko dla admina i kierownika) —</option>
+              {others.map((u) => <option key={u.id} value={u.id}>{u.fullName} ({ROLE_LABELS[u.role]})</option>)}
+            </select>
+          </Field>
+        )}
+        {tasks > 0 && (
+          <Field label="Zadania tej osoby">
+            <select className="input" value={tasksTo} onChange={(e) => setTasksTo(e.target.value)}>
+              <option value="">— usuń zadania —</option>
+              {others.map((u) => <option key={u.id} value={u.id}>przekaż: {u.fullName}</option>)}
+            </select>
+          </Field>
+        )}
+        {preview && preview.activities > 0 && (
+          <p className="text-slate-500">Wpisy w historii klientów zostaną, a jako autor pojawi się „Poprzedni opiekun” – bez danych osobowych.</p>
+        )}
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand-600" checked={anonymizeLogs} onChange={(e) => setAnonymizeLogs(e.target.checked)} />
+          <span>
+            Zanonimizuj w logach (imię i nazwisko, login i e-mail zastąpione „Usunięty użytkownik”).
+            <span className="block text-xs text-slate-500">Odznacz, jeśli logi mają nadal pokazywać, kto wykonywał dawne operacje.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 border-t border-slate-100 pt-3">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-red-600" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+          <span className="font-medium">Rozumiem, że tej operacji nie da się cofnąć (poza odtworzeniem kopii zapasowej).</span>
+        </label>
+        <ErrorText error={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Anuluj</Button>
+          <Button variant="danger" onClick={submit} disabled={!confirmed || !preview || busy}><Trash2 size={15} /> {busy ? 'Usuwam…' : 'Usuń użytkownika'}</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
