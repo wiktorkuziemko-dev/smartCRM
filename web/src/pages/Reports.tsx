@@ -10,8 +10,8 @@ import { exportXlsx } from '../lib/export';
 import { Button, ErrorText, Field, StatusBadge } from '../components/ui';
 import { ClientPanel } from '../components/ClientPanel';
 
-type ParamType = 'days' | 'number' | 'owner' | 'status' | 'tag' | 'voivodeship' | 'user' | 'date';
-interface Param { key: string; label: string; type: ParamType; default?: string | number; optional?: boolean }
+type ParamType = 'days' | 'number' | 'owner' | 'status' | 'tag' | 'voivodeship' | 'user' | 'date' | 'choice';
+interface Param { key: string; label: string; type: ParamType; default?: string | number; optional?: boolean; options?: { value: string; label: string }[] }
 interface ReportDef { key: string; group: string; title: string; description: string; params: Param[] }
 type ColType = 'text' | 'client' | 'number' | 'days' | 'date' | 'datetime' | 'status';
 interface Column { key: string; label: string; type: ColType }
@@ -150,6 +150,18 @@ function ParamInput({ param: p, value, onChange }: { param: Param; value: string
       break;
     case 'tag':
       input = <select className="input w-40" value={value} onChange={(e) => onChange(e.target.value)}>{all}{tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>;
+      break;
+    case 'choice':
+      input = (
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+          {p.options!.map((o) => (
+            <button key={o.value} type="button" onClick={() => onChange(o.value)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${value === o.value ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      );
       break;
     case 'voivodeship':
       input = <select className="input w-48" value={value} onChange={(e) => onChange(e.target.value)}>{all}{voivodeships.map((v) => <option key={v} value={v}>{v}</option>)}</select>;

@@ -10,8 +10,11 @@ import { dayRange } from '../lib/time.js';
  * i zwraca kolumny + wiersze. Klienci zarchiwizowani są pomijani.
  */
 
-type ParamType = 'days' | 'number' | 'owner' | 'status' | 'tag' | 'voivodeship' | 'user' | 'date';
-interface Param { key: string; label: string; type: ParamType; default?: string | number; optional?: boolean }
+type ParamType = 'days' | 'number' | 'owner' | 'status' | 'tag' | 'voivodeship' | 'user' | 'date' | 'choice';
+interface Param {
+  key: string; label: string; type: ParamType; default?: string | number; optional?: boolean;
+  options?: { value: string; label: string }[]; // dla type 'choice'
+}
 type ColType = 'text' | 'client' | 'number' | 'days' | 'date' | 'datetime' | 'status';
 interface Column { key: string; label: string; type: ColType }
 interface Report {
@@ -246,15 +249,45 @@ const REPORTS: Report[] = [
 
   // --- Aktualność i kontakt ---
   {
-    key: 'stale', group: 'Aktualność danych', title: 'Klienci nieedytowani od … dni',
-    description: 'Klienci, u których od podanej liczby dni nic się nie zmieniło – ani dane na karcie, ani historia (wpisy, telefony, spotkania, osoby kontaktowe).',
-    params: [{ key: 'days', label: 'Bez zmian dłużej niż (dni)', type: 'days', default: 90 }, ...CLIENT_FILTERS],
+    key: 'edit-state', group: 'Aktualność danych', title: 'Klienci wg stanu edycji',
+    description: 'Klienci, przy których w wybranym okresie coś się zmieniło (edytowani) albo nic się nie zmieniło (nieedytowani). '
+      + 'Zmiana to: edycja danych lub osób kontaktowych, wpis w historii (komentarz, telefon, spotkanie, e-mail), zmiana statusu, tagów, '
+      + 'dostępu, zadania oraz dodanie klienta.',
+    params: [
+      { key: 'mode', label: 'Stan', type: 'choice', default: 'edited',
+        options: [{ value: 'edited', label: 'Edytowani w okresie' }, { value: 'unedited', label: 'Nieedytowani w okresie' }] },
+      { key: 'from', label: 'Od dnia', type: 'date' }, { key: 'to', label: 'Do dnia', type: 'date' }, ...CLIENT_FILTERS,
+    ],
     run: async (p) => {
-      const rows = await clientRows(sql`${clientWhere(p)} and c.updated_at < now() - make_interval(days => ${int(p.days, 90)})`, sql`order by "updatedAt"`);
+      const range = dayRange(p.from ?? '', p.to ?? '');
+      if (typeof range === 'string') throw new ReportError(range);
+      const edited = p.mode !== 'unedited';
+      const from = range.from.toISOString();
+      const to = range.untilNow ? new Date(Date.now() + 60_000).toISOString() : range.to.toISOString();
+      const tz = config.timezone;
+      // Zdarzenia zmiany klienta z datą: historia (także wpisy systemowe), dziennik zdarzeń, dodanie i ostatnia zmiana.
+      const { rows } = await db.execute<Record<string, unknown>>(sql`
+        with events as (
+          select client_id, created_at as at from activities
+          union all select client_id, at from audit_log where client_id is not null and category in ('client', 'history', 'task', 'access')
+          union all select id, created_at from clients
+          union all select id, updated_at from clients
+        )
+        select x.*, e.days as "editDays", e.last_at as "lastEditInRange" from (${CLIENTS} where ${clientWhere(p)}) x
+        left join lateral (
+          select count(distinct (ev.at at time zone ${tz})::date)::int as days, max(ev.at) as last_at
+          from events ev where ev.client_id = x."clientId" and ev.at >= ${from}::timestamptz and ev.at < ${to}::timestamptz
+        ) e on true
+        where ${edited ? sql`e.days > 0` : sql`e.days = 0 and x."createdAt" < ${to}::timestamptz`}
+        order by ${edited ? sql`e.last_at desc` : sql`x."updatedAt"`}`);
       const last = await lastEntries(rows.map((r) => r.clientId as number));
       return {
-        columns: [COL.name, COL.owner, COL.status, COL.updatedAt, { key: 'daysIdle', label: 'Dni bez zmian', type: 'days' },
-          { key: 'lastAuthor', label: 'Ostatni wpis – autor', type: 'text' }, { key: 'lastEntry', label: 'Ostatni wpis', type: 'text' }, COL.potential],
+        columns: edited
+          ? [COL.name, COL.owner, COL.status, { key: 'editDays', label: 'Dni ze zmianami w okresie', type: 'days' },
+            { key: 'lastEditInRange', label: 'Ostatnia zmiana w okresie', type: 'datetime' },
+            { key: 'lastAuthor', label: 'Ostatni wpis – autor', type: 'text' }, { key: 'lastEntry', label: 'Ostatni wpis', type: 'text' }, COL.potential]
+          : [COL.name, COL.owner, COL.status, COL.updatedAt, { key: 'daysIdle', label: 'Dni od ostatniej zmiany', type: 'days' },
+            { key: 'lastAuthor', label: 'Ostatni wpis – autor', type: 'text' }, { key: 'lastEntry', label: 'Ostatni wpis', type: 'text' }, COL.potential],
         rows: rows.map((r) => ({ ...r, daysIdle: daysSince(r.updatedAt), ...last.get(r.clientId as number) })),
       };
     },
