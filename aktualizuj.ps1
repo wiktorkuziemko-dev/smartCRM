@@ -6,9 +6,12 @@
   1. Sprawdza folder aplikacji (musi zawierać .env i docker-compose.yml).
   2. Bierze najnowszą paczkę smartCRM*.tar.gz z folderu Pobrane (albo wskazaną w -Paczka)
      i sprawdza, czy zawiera inną wersję niż obecna.
-  3. Zatrzymuje aplikację, podmienia folder (stara wersja trafia do "<nazwa>-poprzednia-wersja"),
-     kopiuje .env, buduje i uruchamia nową wersję.
-  4. Przy błędzie przywraca poprzednią wersję. Dane (baza, załączniki) są w Dockerze i nie są ruszane.
+  3. Buduje nową wersję, gdy obecna jeszcze działa (3 próby przy problemach z siecią). Jeśli się nie uda,
+     kończy bez żadnych zmian – aplikacja działa dalej.
+  4. Zatrzymuje aplikację, podmienia folder (stara wersja trafia do "<nazwa>-poprzednia-wersja")
+     i uruchamia nową wersję.
+  5. Przy błędzie przywraca poprzednią wersję (jej obraz: smartcrm:poprzednia, bez ponownego budowania).
+     Dane (baza, załączniki) są w Dockerze i nie są ruszane.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File C:\claude_code\smartcrm\aktualizuj.ps1
@@ -105,6 +108,32 @@ if ((OdciskWersji $nowa) -eq (OdciskWersji $Aplikacja)) {
 Ok 'Paczka zawiera nową wersję'
 Copy-Item -LiteralPath (Join-Path $Aplikacja '.env') -Destination (Join-Path $nowa '.env')
 
+# Budowanie PRZED zatrzymaniem: obecna wersja działa dalej, a przy problemie z siecią (Docker Hub) nic nie jest zmieniane.
+# Obraz obecnej wersji zapamiętujemy pod osobną nazwą, żeby w razie błędu wrócić do niego bez budowania.
+Krok 'Buduję nową wersję – obecna działa dalej (1-3 minuty)'
+$ErrorActionPreference = 'Continue'
+docker image inspect smartcrm:latest *> $null
+$jestObraz = $LASTEXITCODE -eq 0
+if ($jestObraz) { docker tag smartcrm:latest smartcrm:poprzednia *> $null }
+$ErrorActionPreference = 'Stop'
+$zbudowano = $false
+for ($proba = 1; $proba -le 3 -and -not $zbudowano; $proba++) {
+  try {
+    Uruchom 'Budowanie nowej wersji' { docker compose --project-directory $nowa -f (Join-Path $nowa 'docker-compose.yml') build }
+    $zbudowano = $true
+  } catch {
+    if ($proba -lt 3) { Write-Host "    Próba $proba nieudana – ponawiam za 20 s (najczęściej chwilowy problem z połączeniem)..." -ForegroundColor Yellow; Start-Sleep -Seconds 20 }
+  }
+}
+if (-not $zbudowano) {
+  if ($jestObraz) { docker tag smartcrm:poprzednia smartcrm:latest *> $null }
+  Remove-Item -LiteralPath $robocze -Recurse -Force -ErrorAction SilentlyContinue
+  Przerwij ("Nie udało się zbudować nowej wersji (3 próby). Najczęstsza przyczyna: brak połączenia z Docker Hub (docker.io).`n" +
+    "Aplikacja DZIAŁA DALEJ w obecnej wersji – nic nie zostało zmienione.`n" +
+    "Sprawdź połączenie poleceniem:  docker pull node:22-alpine   i uruchom aktualizację ponownie.")
+}
+Ok 'Zbudowano nową wersję'
+
 Krok 'Zatrzymuję obecną wersję'
 Uruchom 'Zatrzymanie aplikacji' { docker compose --project-directory $Aplikacja -f (Join-Path $Aplikacja 'docker-compose.yml') down }
 Ok 'Zatrzymano (dane w bazie zostają)'
@@ -119,8 +148,8 @@ try {
   Remove-Item -LiteralPath $robocze -Recurse -Force
   Ok "Poprzednia wersja zapisana w $kopia"
 
-  Krok 'Buduję i uruchamiam nową wersję (1-3 minuty)'
-  Uruchom 'Budowanie i uruchomienie' { docker compose --project-directory $Aplikacja -f (Join-Path $Aplikacja 'docker-compose.yml') up -d --build }
+  Krok 'Uruchamiam nową wersję'
+  Uruchom 'Uruchomienie' { docker compose --project-directory $Aplikacja -f (Join-Path $Aplikacja 'docker-compose.yml') up -d }
 }
 catch {
   $ErrorActionPreference = 'Continue'
@@ -133,6 +162,8 @@ catch {
   } elseif (-not (Test-Path -LiteralPath $Aplikacja) -and (Test-Path -LiteralPath $kopia)) {
     Move-Item -LiteralPath $kopia -Destination $Aplikacja
   }
+  # Obraz poprzedniej wersji (zapamiętany przed budowaniem) – powrót bez budowania i bez internetu.
+  if ($jestObraz) { docker tag smartcrm:poprzednia smartcrm:latest }
   docker compose --project-directory $Aplikacja -f (Join-Path $Aplikacja 'docker-compose.yml') up -d
   if (Test-Path -LiteralPath $robocze) { Remove-Item -LiteralPath $robocze -Recurse -Force -ErrorAction SilentlyContinue }
   Write-Host "Przywrócono poprzednią wersję w $Aplikacja." -ForegroundColor Yellow
@@ -153,7 +184,7 @@ for ($i = 0; $i -lt 30 -and -not $dziala; $i++) {
 }
 if (-not $dziala) {
   Write-Host "`nAplikacja nie odpowiada pod $adres. Sprawdź logi:  docker compose --project-directory $Aplikacja logs app --tail 50" -ForegroundColor Yellow
-  Write-Host "Poprzednia wersja jest w $kopia."
+  Write-Host "Poprzednia wersja jest w $kopia (jej obraz: smartcrm:poprzednia)."
   exit 1
 }
 
