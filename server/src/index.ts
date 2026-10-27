@@ -19,6 +19,7 @@ import { importRoutes } from './routes/import.js';
 import { gpsRoutes } from './routes/gps.js';
 import { reportRoutes } from './routes/reports.js';
 import { auditRoutes } from './routes/audit.js';
+import { smartRoutes } from './routes/smart.js';
 import { registerAudit } from './lib/audit.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
@@ -29,7 +30,7 @@ await app.register(multipart, { limits: { fileSize: config.maxUploadMb * 1024 * 
 app.get('/api/health', async () => ({ ok: true }));
 // Dziennik zdarzeń – haki muszą być dodane przed rejestracją tras, żeby objęły wszystkie.
 registerAudit(app);
-for (const routes of [authRoutes, userRoutes, settingsRoutes, clientRoutes, activityRoutes, taskRoutes, googleRoutes, dashboardRoutes, importRoutes, gpsRoutes, reportRoutes, auditRoutes]) {
+for (const routes of [authRoutes, userRoutes, settingsRoutes, clientRoutes, activityRoutes, taskRoutes, googleRoutes, dashboardRoutes, importRoutes, gpsRoutes, reportRoutes, auditRoutes, smartRoutes]) {
   await app.register(routes);
 }
 

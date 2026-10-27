@@ -114,6 +114,7 @@ export function ClientPanel({ clientId, onClose }: { clientId: number; onClose: 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
             <Detail label="Potencjał ilościowy">{fmtNumber(client.potential)}</Detail>
             <Detail label="Aktualne rozwiązanie">{client.currentSolution}</Detail>
+            {client.domain && <Detail label="Domena">{client.domain}</Detail>}
             <Detail label="E-mail">{client.email && <a className="text-brand-600 hover:underline" href={`mailto:${client.email}`}>{client.email}</a>}</Detail>
             <Detail label="Telefon">{client.phone && <a className="text-brand-600 hover:underline" href={`tel:${client.phone}`}>{client.phone}</a>}</Detail>
             {fields.filter((f) => f.active).map((f) => (

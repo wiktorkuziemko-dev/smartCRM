@@ -82,6 +82,8 @@ export const clients = pgTable('clients', {
   phone: varchar('phone', { length: 64 }),
   potential: integer('potential'),
   currentSolution: text('current_solution'),
+  /** Domena wodociągu na platformie SMART (np. „olsztyn”) – do zakładki Testy. */
+  domain: varchar('domain', { length: 255 }),
   description: text('description'),
   statusId: integer('status_id').references(() => clientStatuses.id, { onDelete: 'set null' }),
   ownerId: integer('owner_id').references(() => users.id, { onDelete: 'set null' }),

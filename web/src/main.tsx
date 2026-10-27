@@ -10,6 +10,7 @@ import { ClientsPage } from './pages/Clients';
 import { TasksPage } from './pages/Tasks';
 import { AdminPage } from './pages/Admin';
 import { ReportsPage } from './pages/Reports';
+import { TestsPage } from './pages/Tests';
 import { SettingsPage } from './pages/Settings';
 
 const queryClient = new QueryClient({
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="tasks" element={<TasksPage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="tests" element={<TestsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="profile" element={<Navigate to="/settings" replace />} />
           </Route>

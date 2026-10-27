@@ -24,6 +24,7 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
     phone: client?.phone ?? '',
     potential: client?.potential?.toString() ?? '',
     currentSolution: client?.currentSolution ?? '',
+    domain: client?.domain ?? '',
     description: client?.description ?? '',
     statusId: client?.statusId?.toString() ?? statuses.find((s) => s.active)?.id.toString() ?? '',
     ownerId: client?.ownerId?.toString() ?? me?.id.toString() ?? '',
@@ -87,6 +88,7 @@ export function ClientForm({ client, onClose, onSaved }: Props) {
             </select>
           </Field>
           <Field label="Aktualne rozwiązanie" className="sm:col-span-2"><input className="input" value={form.currentSolution} onChange={set('currentSolution')} /></Field>
+          <Field label="Domena (platforma SMART, np. olsztyn)" className="sm:col-span-2"><input className="input" value={form.domain} onChange={set('domain')} placeholder="np. olsztyn lub olsztyn.smartmetering24.pl" autoComplete="off" /></Field>
           <Field label="Krótki opis" className="sm:col-span-2"><textarea className="input" rows={3} value={form.description} onChange={set('description')} /></Field>
           {seesAll(me) && (
             <Field label="Opiekun (handlowiec)">

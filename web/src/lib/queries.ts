@@ -35,9 +35,9 @@ export const clientColumnsOf = (me?: Me) => {
   return cols.includes('name') ? cols : ['name', ...cols];
 };
 
-export interface NavLabels { dashboard: string; clients: string; tasks: string; reports: string; settings: string; admin: string }
+export interface NavLabels { dashboard: string; clients: string; tasks: string; reports: string; tests: string; settings: string; admin: string }
 export const NAV_DEFAULTS: NavLabels = {
-  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', settings: 'Ustawienia', admin: 'Administracja',
+  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', tests: 'Testy', settings: 'Ustawienia', admin: 'Administracja',
 };
 /** Nazwy zakładek menu ustawione przez admina (do czasu wczytania – domyślne). */
 export const useNavLabels = (enabled = true): NavLabels => {

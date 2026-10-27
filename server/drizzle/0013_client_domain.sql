@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN "domain" varchar(255);

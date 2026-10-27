@@ -25,7 +25,7 @@ export interface Contact {
 export interface Client {
   id: number; name: string; nip: string | null; voivodeship: string | null;
   email: string | null; phone: string | null; potential: number | null;
-  currentSolution: string | null; description: string | null;
+  currentSolution: string | null; description: string | null; domain?: string | null;
   statusId: number | null; ownerId: number | null; ownerName: string | null;
   custom: Record<string, unknown>; createdAt: string; updatedAt: string;
   tagIds: number[];

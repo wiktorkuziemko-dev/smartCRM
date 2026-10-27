@@ -26,6 +26,10 @@ const clientBody = z.object({
   phone: optionalText(64),
   potential: z.coerce.number().int().min(0).nullish().transform((v) => v ?? null),
   currentSolution: optionalText(),
+  // Domena platformy SMART: bez https:// i ukośników, małe litery (np. „olsztyn” lub „olsztyn.smartmetering24.pl”).
+  domain: z.string().trim().toLowerCase().nullish()
+    .transform((v) => (v ? v.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : null))
+    .refine((v) => v === null || /^[a-z0-9]([a-z0-9.-]{0,253}[a-z0-9])?$/.test(v), 'Domena może zawierać tylko litery, cyfry, kropki i myślniki'),
   description: optionalText(),
   statusId: z.number().int().nullish().transform((v) => v ?? null),
   ownerId: z.number().int().nullish(),

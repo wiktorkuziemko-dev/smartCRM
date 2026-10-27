@@ -66,6 +66,9 @@ const ACTIONS: Record<string, ActionDef> = {
 
   'PUT /api/admin/google': { category: 'integration', label: 'Konfiguracja Kalendarza Google' },
   'DELETE /api/admin/google': { category: 'integration', label: 'Wyłączenie Kalendarza Google' },
+  'PUT /api/admin/smart': { category: 'integration', label: 'Konfiguracja integracji ze SMART' },
+  'DELETE /api/admin/smart': { category: 'integration', label: 'Wyłączenie integracji ze SMART' },
+  'GET /api/tests': { category: 'view', label: 'Testy – wyniki nakładek' },
   'PUT /api/admin/eserver': { category: 'integration', label: 'Konfiguracja E-SERVER' },
   'DELETE /api/admin/eserver': { category: 'integration', label: 'Wyłączenie E-SERVER' },
   'PUT /api/admin/eserver/assign': { category: 'integration', label: 'Przypisanie nadajnika GPS', entity: 'user' },

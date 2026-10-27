@@ -23,7 +23,7 @@ function slugify(label: string) {
 
 // Nazwy zakładek menu – ustawiane przez admina, wspólne dla wszystkich użytkowników.
 export const NAV_DEFAULTS = {
-  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', settings: 'Ustawienia', admin: 'Administracja',
+  dashboard: 'Pulpit', clients: 'Klienci', tasks: 'Moje zadania', reports: 'Raporty', tests: 'Testy', settings: 'Ustawienia', admin: 'Administracja',
 };
 type NavKey = keyof typeof NAV_DEFAULTS;
 

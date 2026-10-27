@@ -13,14 +13,15 @@ import { NAV_DEFAULTS, ROLE_LABELS, useFields, useMe, useNavLabels, useStatuses,
 import { Avatar, Button, ErrorText, Field, Modal, StatusBadge, TagChip } from '../components/ui';
 import { AvatarUpload } from '../components/AvatarUpload';
 import { LogsTab } from './LogsTab';
+import { SmartTab } from './SmartTab';
 
-const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Import', 'Nazwy zakładek', 'Logi'] as const;
+const TABS = ['Użytkownicy', 'Statusy klienta', 'Tagi', 'Pola klienta', 'Archiwum', 'Integracje', 'Integracja E-SERVER', 'Integracja ze SMART', 'Import', 'Nazwy zakładek', 'Logi'] as const;
 
 export function AdminPage() {
   const { data: me } = useMe();
   // ?tab=eserver – bezpośredni link z pulpitu do ustawień integracji GPS.
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<(typeof TABS)[number]>(params.get('tab') === 'eserver' ? 'Integracja E-SERVER' : 'Użytkownicy');
+  const [tab, setTab] = useState<(typeof TABS)[number]>(params.get('tab') === 'eserver' ? 'Integracja E-SERVER' : params.get('tab') === 'smart' ? 'Integracja ze SMART' : 'Użytkownicy');
   const labels = useNavLabels();
   if (me && me.role !== 'ADMIN') return <Navigate to="/" replace />;
 
@@ -42,6 +43,7 @@ export function AdminPage() {
       {tab === 'Archiwum' && <ArchiveTab />}
       {tab === 'Integracje' && <IntegrationsTab />}
       {tab === 'Integracja E-SERVER' && <EServerTab />}
+      {tab === 'Integracja ze SMART' && <SmartTab />}
       {tab === 'Import' && <ImportTab />}
       {tab === 'Nazwy zakładek' && <NavLabelsTab />}
       {tab === 'Logi' && <LogsTab />}
@@ -505,6 +507,7 @@ const NAV_FIELDS: { key: keyof NavLabels; hint: string }[] = [
   { key: 'clients', hint: 'lista klientów' },
   { key: 'tasks', hint: 'zadania zalogowanej osoby' },
   { key: 'reports', hint: 'widoczna dla kierownika i admina' },
+  { key: 'tests', hint: 'wyniki testów nakładek, kierownik i admin' },
   { key: 'settings', hint: 'ustawienia osobiste' },
   { key: 'admin', hint: 'widoczna tylko dla admina' },
 ];
