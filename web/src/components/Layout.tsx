@@ -31,7 +31,8 @@ export function Layout() {
     { to: '/', label: labels.dashboard, icon: Home, end: true },
     { to: '/clients', label: labels.clients, icon: Users },
     { to: '/tasks', label: labels.tasks, icon: CheckSquare, badge: dueCount },
-    ...(seesAll(me) ? [{ to: '/reports', label: labels.reports, icon: FileBarChart }, { to: '/tests', label: labels.tests, icon: FlaskConical }] : []),
+    ...(seesAll(me) ? [{ to: '/reports', label: labels.reports, icon: FileBarChart }] : []),
+    { to: '/tests', label: labels.tests, icon: FlaskConical },
     { to: '/settings', label: labels.settings, icon: Settings },
     ...(me.role === 'ADMIN' ? [{ to: '/admin', label: labels.admin, icon: ShieldCheck }] : []),
   ];

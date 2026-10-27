@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Download, FlaskConical, Refre
 import { addDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { fmtNumber } from '../lib/format';
-import { useMe, useNavLabels } from '../lib/queries';
+import { seesAll, useMe, useNavLabels } from '../lib/queries';
 import { exportXlsx } from '../lib/export';
 import { Button, ErrorText } from '../components/ui';
 import { ClientPanel } from '../components/ClientPanel';
@@ -76,8 +76,6 @@ export function TestsPage() {
     ], lines);
   }
 
-  if (me && me.role !== 'ADMIN' && me.role !== 'MANAGER') return null;
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -105,12 +103,12 @@ export function TestsPage() {
 
       {data && !data.configured && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white/60 px-5 py-4 text-sm text-slate-500">
-          Integracja ze SMART nie jest skonfigurowana.{me?.role === 'ADMIN' && <> Uzupełnij dane w <Link to="/admin?tab=smart" className="text-brand-600 hover:underline">Administracja → Integracja ze SMART</Link>.</>}
+          Integracja ze SMART nie jest skonfigurowana.{me?.role === 'ADMIN' ? <> Uzupełnij dane w <Link to="/admin?tab=smart" className="text-brand-600 hover:underline">Administracja → Integracja ze SMART</Link>.</> : ' Zgłoś to administratorowi.'}
         </p>
       )}
       {data?.tagMissing && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white/60 px-5 py-4 text-sm text-slate-500">
-          Nie wybrano tagu klientów testowych – wskaż go w Administracja → Integracja ze SMART.
+          Nie wybrano tagu klientów testowych – {me?.role === 'ADMIN' ? 'wskaż go w Administracja → Integracja ze SMART.' : 'zgłoś to administratorowi.'}
         </p>
       )}
       <ErrorText error={error} />
@@ -119,7 +117,7 @@ export function TestsPage() {
       {data?.rows && (
         <>
           <p className="mb-3 text-sm text-slate-500">
-            Klienci z tagiem <b>{data.tag}</b> · okres {short(data.from!)} – {short(data.to!)} ({days.length} dni)
+            {seesAll(me) ? 'Klienci' : 'Twoi klienci (pod opieką i udostępnieni)'} z tagiem <b>{data.tag}</b> · okres {short(data.from!)} – {short(data.to!)} ({days.length} dni)
             {isFetching && <span className="ml-2 text-slate-400">odświeżam…</span>}
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -186,7 +184,7 @@ export function TestsPage() {
                   })}
                 </tbody>
               </table>
-              {!rows.length && <p className="px-4 py-10 text-center text-sm text-slate-400">Żaden klient nie ma tagu „{data.tag}”.</p>}
+              {!rows.length && <p className="px-4 py-10 text-center text-sm text-slate-400">{seesAll(me) ? `Żaden klient nie ma tagu „${data.tag}”.` : `Nie masz klientów z tagiem „${data.tag}”.`}</p>}
             </div>
           </section>
           <p className="mt-2 text-xs text-slate-400">

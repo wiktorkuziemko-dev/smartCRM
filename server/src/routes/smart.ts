@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
+import { clientVisibleTo } from '../lib/access.js';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, requireRole } from '../lib/auth.js';
@@ -59,7 +60,8 @@ export async function smartRoutes(app: FastifyInstance) {
   });
 
   // --- Zakładka Testy: klienci z tagiem testowym i wyniki raportowania nakładek ---
-  app.get('/api/tests', { preHandler: [requireAuth, requireRole('ADMIN', 'MANAGER')] }, async (req, reply) => {
+  // Admin i kierownik widzą wszystkie wodociągi testowe; handlowiec – te, które widzi (pod opieką i udostępnione).
+  app.get('/api/tests', { preHandler: requireAuth }, async (req, reply) => {
     const cfg = await getSmartConfig();
     if (!cfg) return { configured: false };
     if (!cfg.tagId) return { configured: true, tagMissing: true };
@@ -81,7 +83,7 @@ export async function smartRoutes(app: FastifyInstance) {
       .from(schema.clients)
       .innerJoin(schema.clientTags, and(eq(schema.clientTags.clientId, schema.clients.id), eq(schema.clientTags.tagId, cfg.tagId)))
       .leftJoin(schema.users, eq(schema.users.id, schema.clients.ownerId))
-      .where(isNull(schema.clients.archivedAt))
+      .where(clientVisibleTo(req.user))
       .orderBy(asc(schema.clients.name));
 
     const rows = await mapLimit(clients, 3, async (c) => {
