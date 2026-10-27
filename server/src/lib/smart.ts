@@ -1,3 +1,4 @@
+import { Agent, fetch, type Response } from 'undici';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 
@@ -54,6 +55,11 @@ export async function removeSmartConfig() {
 export const fullDomain = (domain: string, cfg: Pick<SmartConfig, 'domainSuffix'>) =>
   (domain.includes('.') ? domain : `${domain}${cfg.domainSuffix}`);
 
+// Serwery platformy SMART nie wysyłają pełnego łańcucha certyfikatów (UNABLE_TO_VERIFY_LEAF_SIGNATURE).
+// Na życzenie właściciela integracja łączy się bez sprawdzania certyfikatu – tylko zapytania do SMART;
+// pozostałe połączenia aplikacji są weryfikowane.
+const insecureAgent = new Agent({ connect: { rejectUnauthorized: false } });
+
 async function post(url: string, data: Record<string, string>, bearer?: string) {
   let res: Response;
   try {
@@ -62,6 +68,7 @@ async function post(url: string, data: Record<string, string>, bearer?: string) 
       headers: { State: STATE, Accept: 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
       body: new URLSearchParams(data), // jak payload-obiekt w UrlFetchApp: application/x-www-form-urlencoded
       signal: AbortSignal.timeout(60_000),
+      dispatcher: url.startsWith('https:') ? insecureAgent : undefined,
     });
   } catch (err) {
     const e = err as Error & { cause?: { code?: string; message?: string } };
