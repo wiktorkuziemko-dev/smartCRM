@@ -47,3 +47,5 @@ export const useNavLabels = (enabled = true): NavLabels => {
 
 export const ROLE_LABELS: Record<string, string> = { ADMIN: 'Administrator', MANAGER: 'Kierownik', SALES: 'Handlowiec' };
 export const seesAll = (me?: Me) => me?.role === 'ADMIN' || me?.role === 'MANAGER';
+/** Eksport danych do Excela – tylko admin i kierownik (handlowcy nie eksportują żadnych danych). */
+export const canExport = seesAll;

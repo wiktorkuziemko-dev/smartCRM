@@ -9,7 +9,8 @@ import { dayRange } from '../lib/time.js';
 
 export async function auditRoutes(app: FastifyInstance) {
   /** Zapis eksportu do Excela (plik powstaje w przeglądarce) – sam wpis tworzy dziennik zdarzeń. */
-  app.post('/api/audit/export', { preHandler: requireAuth }, async (req, reply) => {
+  // Eksport mają tylko admin i kierownik – próba handlowca kończy się odmową (zapisaną w logach).
+  app.post('/api/audit/export', { preHandler: [requireAuth, requireRole('ADMIN', 'MANAGER')] }, async (req, reply) => {
     const body = parse(z.object({ file: z.string().max(200), rows: z.number().int().min(0) }), req.body, reply);
     if (!body) return;
     return { ok: true };

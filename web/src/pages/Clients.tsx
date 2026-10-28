@@ -6,7 +6,7 @@ import { fmtDate, fmtDue, fmtNip, fmtNumber, isOverdue } from '../lib/format';
 import { exportXlsx } from '../lib/export';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type Me } from '../lib/api';
-import { clientColumnsOf, useClients, useFields, useMe, useNavLabels, useStatuses, useTags, useVoivodeships } from '../lib/queries';
+import { canExport, clientColumnsOf, useClients, useFields, useMe, useNavLabels, useStatuses, useTags, useVoivodeships } from '../lib/queries';
 import { ClientPanel } from '../components/ClientPanel';
 import { ClientForm } from '../components/ClientForm';
 import { formatCustomValue } from '../components/CustomFieldInput';
@@ -209,7 +209,7 @@ export function ClientsPage() {
                 </>
               )}
             </div>
-            <Button variant="secondary" onClick={exportList} disabled={!rows.length}><Download size={15} /> Eksport XLS</Button>
+            {canExport(me) && <Button variant="secondary" onClick={exportList} disabled={!rows.length}><Download size={15} /> Eksport XLS</Button>}
             <Button onClick={() => setCreating(true)}><Plus size={16} /> Nowy klient</Button>
           </div>
         </div>

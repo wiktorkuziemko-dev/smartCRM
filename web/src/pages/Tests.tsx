@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Download, FlaskConical, Refre
 import { addDays, format, parseISO } from 'date-fns';
 import { api } from '../lib/api';
 import { fmtNumber } from '../lib/format';
-import { seesAll, useMe, useNavLabels } from '../lib/queries';
+import { canExport, seesAll, useMe, useNavLabels } from '../lib/queries';
 import { exportXlsx } from '../lib/export';
 import { Button, ErrorText } from '../components/ui';
 import { ClientPanel } from '../components/ClientPanel';
@@ -98,7 +98,7 @@ export function TestsPage() {
         <Button variant="ghost" onClick={() => setFresh((n) => n + 1)} disabled={isFetching} title="Pobierz dane z SMART na nowo">
           <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} /> Odśwież
         </Button>
-        <Button variant="ghost" onClick={exportFile} disabled={!withResult.length}><Download size={15} /> Excel</Button>
+        {canExport(me) && <Button variant="ghost" onClick={exportFile} disabled={!withResult.length}><Download size={15} /> Excel</Button>}
       </div>
 
       {data && !data.configured && (

@@ -2,7 +2,7 @@ import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightLeft, CalendarClock, Check, FileText, Info, Mail, MessageSquare, Paperclip, Phone, Send, Trash2, Users, X } from 'lucide-react';
 import { api, type Activity, type ActivityType } from '../lib/api';
-import { fmtAgo, fmtDateTime, fmtDue, fmtSize, isOverdue, isPastInput, toLocalInput } from '../lib/format';
+import { fmtDay, fmtDateTime, fmtDue, fmtSize, isOverdue, isPastInput, toLocalInput } from '../lib/format';
 import { seesAll, useMe, useUsers } from '../lib/queries';
 import { Avatar, Button, ErrorText } from './ui';
 
@@ -71,12 +71,23 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
   // Autor spoza listy użytkowników (np. „Poprzedni opiekun” z importu).
   const author = a.authorName ?? a.authorLabel;
 
+  // Wpis o założeniu klienta (z aplikacji lub z importu Asany: autor i data z created_by / created_at).
+  if (a.type === 'system' && a.content.startsWith('Utworzono klienta')) {
+    return (
+      <div className="flex items-center gap-2 pl-1 text-xs text-slate-500" title={fmtDateTime(a.createdAt)}>
+        <span className={`flex h-6 w-6 items-center justify-center rounded-full ${meta.tone}`}><meta.icon size={12} /></span>
+        <span>Klient założony przez <b className="font-medium text-slate-600">{author === 'Poprzedni opiekun' ? 'Poprzedniego opiekuna' : author ?? 'nieznanego autora'}</b> w dniu <b className="font-medium text-slate-600">{fmtDay(a.createdAt)}</b></span>
+        {a.source === 'asana' && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">z Asany</span>}
+      </div>
+    );
+  }
+
   if (a.type === 'status_change' || a.type === 'system') {
     return (
       <div className="flex items-center gap-2 pl-1 text-xs text-slate-500">
         <span className={`flex h-6 w-6 items-center justify-center rounded-full ${meta.tone}`}><meta.icon size={12} /></span>
         <span><b className="font-medium text-slate-600">{author ?? 'System'}</b> · {a.content}</span>
-        <span className="text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtAgo(a.createdAt)}</span>
+        <span className="text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtDay(a.createdAt)}</span>
       </div>
     );
   }
@@ -108,7 +119,7 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
           {a.type !== 'comment' && (
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${meta.tone}`}><meta.icon size={11} />{meta.label}</span>
           )}
-          <span className="text-xs text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtAgo(a.createdAt)}</span>
+          <span className="text-xs text-slate-400" title={fmtDateTime(a.createdAt)}>{fmtDay(a.createdAt)}</span>
           {!readOnly && (a.authorId === me?.id || me?.role === 'ADMIN') && (
             <button onClick={remove} className="ml-auto text-slate-300 opacity-0 transition hover:text-red-500 group-hover:opacity-100" title="Usuń wpis">
               <Trash2 size={14} />

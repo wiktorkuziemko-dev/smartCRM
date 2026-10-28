@@ -3,6 +3,8 @@ import { pl } from 'date-fns/locale';
 
 export const fmtDate = (d: string | Date) => format(new Date(d), 'd MMM yyyy', { locale: pl });
 export const fmtDateTime = (d: string | Date) => format(new Date(d), 'd MMM yyyy, HH:mm', { locale: pl });
+/** Data w formacie dd.mm.rrrr (np. w historii klienta). */
+export const fmtDay = (d: string | Date) => format(new Date(d), 'dd.MM.yyyy');
 export const fmtAgo = (d: string | Date) => formatDistanceToNow(new Date(d), { locale: pl, addSuffix: true });
 
 export function fmtDue(d: string) {
