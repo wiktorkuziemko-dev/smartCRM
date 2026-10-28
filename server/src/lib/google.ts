@@ -71,7 +71,7 @@ async function fetchAccessToken(account: ServiceAccount) {
   } catch {
     throw new Error('Nieprawidłowy klucz prywatny w pliku JSON.');
   }
-  const res = await fetch(account.token_uri, {
+  const res = await googleFetch(account.token_uri, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claims}.${signature}` }),
@@ -83,6 +83,32 @@ async function fetchAccessToken(account: ServiceAccount) {
   return { token: body.access_token, expires: Date.now() + ((body.expires_in ?? 3600) - 60) * 1000 };
 }
 
+/** fetch do Google z czytelnym komunikatem, gdy połączenie się nie uda (zamiast samego „fetch failed”). */
+async function googleFetch(url: string, init: RequestInit) {
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(30_000) });
+  } catch (err) {
+    const e = err as Error & { cause?: { code?: string; message?: string } };
+    const code = e.cause?.code ?? (e.name === 'TimeoutError' ? 'TIMEOUT' : '');
+    const host = new URL(url).host;
+    const hints: Record<string, string> = {
+      ENOTFOUND: 'serwer aplikacji nie może odnaleźć adresu (DNS) – sprawdź dostęp kontenera Docker do internetu',
+      EAI_AGAIN: 'chwilowy błąd DNS – spróbuj ponownie; jeśli się powtarza, sprawdź DNS i dostęp do internetu',
+      ECONNREFUSED: 'połączenie odrzucone – najczęściej zapora lub proxy',
+      ECONNRESET: 'połączenie przerwane – najczęściej zapora, proxy, VPN lub antywirus',
+      ETIMEDOUT: 'brak odpowiedzi – połączenie blokuje prawdopodobnie zapora, proxy lub VPN',
+      UND_ERR_CONNECT_TIMEOUT: 'brak odpowiedzi – połączenie blokuje prawdopodobnie zapora, proxy lub VPN',
+      TIMEOUT: 'brak odpowiedzi w ciągu 30 s',
+      SELF_SIGNED_CERT_IN_CHAIN: 'ruch HTTPS przechwytuje antywirus lub zapora (własny certyfikat w łańcuchu)',
+      UNABLE_TO_GET_ISSUER_CERT_LOCALLY: 'ruch HTTPS przechwytuje antywirus lub zapora (nieznany wystawca certyfikatu)',
+      UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'nie można zweryfikować certyfikatu – ruch HTTPS przechwytuje prawdopodobnie antywirus lub zapora',
+      CERT_HAS_EXPIRED: 'certyfikat wygasł albo zegar komputera jest źle ustawiony',
+    };
+    const hint = hints[code] ?? e.cause?.message ?? e.message;
+    throw new Error(`Brak połączenia z Google (${host}): ${hint}${code ? ` [kod: ${code}]` : ''}`);
+  }
+}
+
 async function accessToken() {
   const account = await getServiceAccount();
   if (!account) throw new Error('Integracja z Kalendarzem Google nie jest skonfigurowana');
@@ -91,7 +117,7 @@ async function accessToken() {
 }
 
 async function calendarFetch(calendarId: string, path: string, init: RequestInit = {}) {
-  return fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${path}`, {
+  return googleFetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
   });
