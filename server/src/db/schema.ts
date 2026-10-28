@@ -115,7 +115,7 @@ export const activities = pgTable('activities', {
   authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
   type: activityTypeEnum('type').notNull().default('comment'),
   content: text('content').notNull().default(''),
-  // Autor spoza listy użytkowników (np. "Poprzedni opiekun" przy imporcie) – gdy author_id jest pusty.
+  // Autor spoza listy użytkowników (imię i nazwisko z Asany lub usuniętego użytkownika) – gdy author_id jest pusty.
   authorLabel: varchar('author_label', { length: 128 }),
   // Źródło wpisu, np. "asana" – wpisy z importu nie liczą się do statystyk aktywności.
   source: varchar('source', { length: 16 }),

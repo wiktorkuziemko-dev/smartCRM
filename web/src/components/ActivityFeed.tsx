@@ -68,7 +68,7 @@ function ActivityItem({ activity: a, readOnly }: { activity: Activity; readOnly?
   const { data: me } = useMe();
   const qc = useQueryClient();
   const meta = TYPE_META[a.type];
-  // Autor spoza listy użytkowników (np. „Poprzedni opiekun” z importu).
+  // Autor spoza listy użytkowników (imię i nazwisko z Asany lub usuniętego użytkownika).
   const author = a.authorName ?? a.authorLabel;
 
   // Wpis o założeniu klienta (z aplikacji lub z importu Asany: autor i data z created_by / created_at).

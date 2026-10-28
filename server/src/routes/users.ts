@@ -7,7 +7,6 @@ import { requireAuth, requireRole } from '../lib/auth.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 import { auditNote } from '../lib/audit.js';
 import { syncTaskToGoogle } from '../lib/google.js';
-import { PREVIOUS_OWNER } from '../lib/asanaImport.js';
 
 const roles = z.enum(['ADMIN', 'MANAGER', 'SALES']);
 
@@ -120,8 +119,8 @@ export async function userRoutes(app: FastifyInstance) {
       } else {
         await tx.delete(schema.tasks).where(eq(schema.tasks.assigneeId, params.id));
       }
-      // 3. Historia klientów – autor zastąpiony etykietą bez danych osobowych.
-      await tx.update(schema.activities).set({ authorId: null, authorLabel: PREVIOUS_OWNER }).where(eq(schema.activities.authorId, params.id));
+      // 3. Historia klientów – wpisy zostają podpisane imieniem i nazwiskiem usuwanej osoby.
+      await tx.update(schema.activities).set({ authorId: null, authorLabel: user.fullName }).where(eq(schema.activities.authorId, params.id));
       // 4. Logi – opcjonalna anonimizacja (imię i nazwisko, login, e-mail także w treści wpisów).
       if (body.anonymizeLogs) {
         const ANON = 'Usunięty użytkownik';

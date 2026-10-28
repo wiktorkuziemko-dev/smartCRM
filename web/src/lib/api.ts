@@ -46,7 +46,7 @@ export type ActivityType = 'comment' | 'call' | 'meeting' | 'email' | 'status_ch
 export interface Attachment { id: number; fileName: string; mimeType: string; size: number }
 export interface Activity {
   id: number; clientId: number; authorId: number | null; authorName: string | null;
-  authorLabel: string | null; source: string | null; // np. „Poprzedni opiekun” / 'asana' przy imporcie
+  authorLabel: string | null; source: string | null; // imię i nazwisko autora spoza SmartCRM / 'asana' przy imporcie
   type: ActivityType; content: string; createdAt: string; attachments: Attachment[];
   /** Zadanie zaplanowane tym wpisem (telefon / spotkanie / e-mail). */
   task: { id: number; dueAt: string; done: boolean; assigneeId: number; assigneeName: string | null } | null;

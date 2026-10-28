@@ -67,7 +67,7 @@ const ENTRY_TYPES: Record<string, string> = { comment: 'Komentarz', call: 'Telef
 
 /**
  * Ostatni wpis w historii każdego klienta (komentarz, telefon, spotkanie, e-mail – także zaplanowane jako zadanie):
- * autor (użytkownik albo etykieta, np. „Poprzedni opiekun”) i treść z rodzajem, datą wpisu i terminem zadania.
+ * autor (użytkownik albo imię i nazwisko osoby spoza SmartCRM) i treść z rodzajem, datą wpisu i terminem zadania.
  */
 async function lastEntries(clientIds: number[]) {
   const out = new Map<number, { lastAuthor: string; lastEntry: string }>();

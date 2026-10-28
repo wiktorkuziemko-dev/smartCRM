@@ -6,7 +6,7 @@ import { useStatuses } from '../lib/queries';
 import { Button, ErrorText, Field, TagChip } from '../components/ui';
 
 interface ImportReport {
-  tasksInFile: number; newClients: number; existingClients: number; newComments: number; commentsByPreviousOwner: number;
+  tasksInFile: number; newClients: number; existingClients: number; newComments: number; commentsByPreviousOwner: number; authorsUpdated?: number;
   archived: number; tasksCreated: number; voivodeshipsSet: number; clientsWithoutOwner: number;
   skipped: { subtasks: number; completed: number; duplicates: string[] };
   owners: Record<string, number>; unknownPeople: Record<string, number>; newTags: string[];
@@ -51,7 +51,8 @@ export function ImportTab() {
         <p className="mb-4 text-sm text-slate-500">
           Taski stają się klientami, projekty – tagami, komentarze – historią kontaktów (z oryginalną datą i autorem).
           Opiekunem zostaje osoba przypisana w Asanie, jeśli ma w SmartCRM konto z tym samym adresem e-mail – inaczej klienta widzą tylko admin i kierownik.
-          Wpisy osób spoza SmartCRM otrzymują autora „Poprzedni opiekun”. Ponowny import dodaje tylko nowych klientów i nowe komentarze.
+          Wpisy osób spoza SmartCRM są podpisane ich imieniem i nazwiskiem z Asany. Ponowny import dodaje tylko nowych klientów i nowe komentarze
+          oraz uzupełnia autorów we wpisach zaimportowanych wcześniej.
           {status ? ` Zaimportowano dotąd klientów: ${status.importedClients}.` : ''}
         </p>
 
@@ -128,12 +129,12 @@ export function ImportTab() {
               <div className="flex flex-wrap gap-1">{r.newTags.length ? r.newTags.map((t) => <TagChip key={t} name={t} color="#64748b" />) : <span className="text-slate-400">brak</span>}</div>
             </div>
             <div>
-              <h3 className="mb-1 font-medium">Osoby spoza SmartCRM → „Poprzedni opiekun”</h3>
+              <h3 className="mb-1 font-medium">Osoby spoza SmartCRM (podpisane imieniem i nazwiskiem z Asany)</h3>
               <p className="mb-1 text-xs text-slate-500">Jeśli ktoś z tej listy nadal pracuje, dodaj mu w Użytkownikach ten sam e-mail i powtórz próbę.</p>
               {Object.keys(r.unknownPeople).length
                 ? <ul className="space-y-0.5 text-slate-600">{Object.entries(r.unknownPeople).map(([e, c]) => <li key={e}>{e} <span className="text-slate-400">({c} wpisów)</span></li>)}</ul>
                 : <p className="text-slate-400">Wszyscy autorzy rozpoznani.</p>}
-              <p className="mt-1 text-xs text-slate-500">Komentarzy z autorem „Poprzedni opiekun”: {r.commentsByPreviousOwner}</p>
+              <p className="mt-1 text-xs text-slate-500">Nowych komentarzy autorów spoza SmartCRM: {r.commentsByPreviousOwner}{r.authorsUpdated ? ` · uzupełniono autora we wcześniejszych wpisach: ${r.authorsUpdated}` : ''}</p>
             </div>
           </div>
 

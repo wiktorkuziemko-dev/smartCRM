@@ -618,7 +618,7 @@ function DeleteUserDialog({ user, users, onClose }: { user: UserRow; users: User
           </Field>
         )}
         {preview && preview.activities > 0 && (
-          <p className="text-slate-500">Wpisy w historii klientów zostaną, a jako autor pojawi się „Poprzedni opiekun” – bez danych osobowych.</p>
+          <p className="text-slate-500">Wpisy w historii klientów zostaną podpisane imieniem i nazwiskiem tej osoby.</p>
         )}
         <label className="flex items-start gap-2">
           <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand-600" checked={anonymizeLogs} onChange={(e) => setAnonymizeLogs(e.target.checked)} />

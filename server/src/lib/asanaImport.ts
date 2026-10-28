@@ -1,4 +1,4 @@
-import { inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { todayInTz, zonedDate } from './time.js';
 import { VOIVODESHIPS } from '../routes/clients.js';
@@ -8,13 +8,15 @@ import { VOIVODESHIPS } from '../routes/clients.js';
  *  - task → klient (nazwa, opis z notes, pierwszy e-mail i telefon z opisu),
  *  - projekty → tagi; projekt o nazwie województwa → także pole „Województwo”,
  *  - assignee → opiekun (po e-mailu); brak / osoba spoza SmartCRM → brak opiekuna (widzą tylko admin i kierownik),
- *  - komentarze → historia kontaktów z oryginalnym autorem i datą; autor spoza SmartCRM → „Poprzedni opiekun”,
+ *  - komentarze → historia kontaktów z oryginalnym autorem i datą; autor spoza SmartCRM → jego imię i nazwisko z Asany,
  *  - due_on → opcjonalnie zadanie dla opiekuna.
  * Identyfikatory Asany (external_id) sprawiają, że ponowny import dodaje tylko nowych klientów i nowe komentarze.
  * Wpisy z importu (source = 'asana') nie liczą się do statystyk aktywności.
  */
 
-export const PREVIOUS_OWNER = 'Poprzedni opiekun';
+/** Imię i nazwisko osoby z Asany (autor spoza SmartCRM) – do historii kontaktów. */
+export const personName = (p: { name?: string; email?: string | null } | null | undefined) =>
+  (p?.name?.trim() || p?.email?.split('@')[0] || 'Nieznany autor').slice(0, 128);
 const SOURCE = 'asana';
 
 export interface ImportOptions {
@@ -99,6 +101,7 @@ export async function planAndRunImport(json: unknown, options: ImportOptions, im
     existingClients: 0,
     newComments: 0,
     commentsByPreviousOwner: 0,
+    authorsUpdated: 0, // ponowny import: wpisy, którym uzupełniono autora (imię i nazwisko z Asany)
     archived: 0,
     tasksCreated: 0,
     voivodeshipsSet: 0,
@@ -124,6 +127,8 @@ export async function planAndRunImport(json: unknown, options: ImportOptions, im
     task: AsanaTask; existingId: number | null; values: typeof schema.clients.$inferInsert;
     tags: string[]; comments: (typeof schema.activities.$inferInsert)[]; created: typeof schema.activities.$inferInsert | null;
     dueTask: Omit<typeof schema.tasks.$inferInsert, 'clientId'> | null;
+    authorFixes?: { externalId: string; authorId: number | null; authorLabel: string | null }[];
+    creatorFix?: { authorId: number | null; authorLabel: string | null };
   };
   const planned: PlannedClient[] = [];
 
@@ -147,14 +152,23 @@ export async function planAndRunImport(json: unknown, options: ImportOptions, im
         if (!author) report.commentsByPreviousOwner++;
         return {
           clientId: 0, type: 'comment' as const, content: c.text!.trim(), createdAt: date(c.created_at, createdAt),
-          authorId: author?.id ?? null, authorLabel: author ? null : PREVIOUS_OWNER, source: SOURCE, externalId: `${SOURCE}:${c.gid}`,
+          authorId: author?.id ?? null, authorLabel: author ? null : personName(c.author), source: SOURCE, externalId: `${SOURCE}:${c.gid}`,
         };
       });
     report.newComments += comments.length;
 
     if (existingId) {
       report.existingClients++;
-      planned.push({ task: t, existingId, values: { name }, tags: [], comments, created: null, dueTask: null });
+      // Autorzy wpisów zaimportowanych wcześniej: imię i nazwisko z Asany (albo powiązanie z użytkownikiem SmartCRM).
+      const authorFixes = (t.comments ?? []).filter((c) => c.gid && existingComments.has(`${SOURCE}:${c.gid}`)).map((c) => {
+        const a = person(c.author);
+        return { externalId: `${SOURCE}:${c.gid}`, authorId: a?.id ?? null, authorLabel: a ? null : personName(c.author) };
+      });
+      const creator = person(t.created_by);
+      planned.push({
+        task: t, existingId, values: { name }, tags: [], comments, created: null, dueTask: null, authorFixes,
+        creatorFix: { authorId: creator?.id ?? null, authorLabel: creator ? null : personName(t.created_by) },
+      });
       continue;
     }
 
@@ -203,7 +217,7 @@ export async function planAndRunImport(json: unknown, options: ImportOptions, im
       },
       created: {
         clientId: 0, type: 'system', content: 'Utworzono klienta (import z Asany)', createdAt,
-        authorId: creator?.id ?? null, authorLabel: creator ? null : PREVIOUS_OWNER, source: SOURCE,
+        authorId: creator?.id ?? null, authorLabel: creator ? null : personName(t.created_by), source: SOURCE,
       },
     });
     report.newClients++;
@@ -241,6 +255,22 @@ export async function planAndRunImport(json: unknown, options: ImportOptions, im
       }
       if (p.comments.length) {
         await tx.insert(schema.activities).values(p.comments.map((c) => ({ ...c, clientId: clientId! })));
+      }
+      // Ponowny import: autorzy wcześniej zaimportowanych wpisów (np. „Poprzedni opiekun” → imię i nazwisko).
+      for (const f of p.authorFixes ?? []) {
+        const changed = await tx.update(schema.activities).set({ authorId: f.authorId, authorLabel: f.authorLabel })
+          .where(and(eq(schema.activities.externalId, f.externalId),
+            sql`(${schema.activities.authorId} is distinct from ${f.authorId} or ${schema.activities.authorLabel} is distinct from ${f.authorLabel})`))
+          .returning({ id: schema.activities.id });
+        report.authorsUpdated += changed.length;
+      }
+      if (p.creatorFix && p.existingId) {
+        const changed = await tx.update(schema.activities).set(p.creatorFix)
+          .where(and(eq(schema.activities.clientId, p.existingId), eq(schema.activities.type, 'system'), eq(schema.activities.source, SOURCE),
+            sql`${schema.activities.content} like 'Utworzono klienta%'`,
+            sql`(${schema.activities.authorId} is distinct from ${p.creatorFix.authorId} or ${schema.activities.authorLabel} is distinct from ${p.creatorFix.authorLabel})`))
+          .returning({ id: schema.activities.id });
+        report.authorsUpdated += changed.length;
       }
     }
   });
